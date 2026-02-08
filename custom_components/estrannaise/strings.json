@@ -177,8 +177,7 @@
           "phase_days": "Cycle day offset (0-27)",
           "units": "Measurement units",
           "enable_calendar": "Add dose schedule to HA calendar",
-          "backfill_doses": "Backfill past doses (enable if already on HRT)",
-          "reset_data": "Reset all saved data (doses and blood tests)"
+          "backfill_doses": "Backfill past doses (enable if already on HRT)"
         }
       }
     }

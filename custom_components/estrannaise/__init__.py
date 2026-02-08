@@ -44,6 +44,7 @@ SERVICE_LOG_BLOOD_TEST_SCHEMA = vol.Schema(
             vol.Coerce(float), vol.Range(min=1577836800, max=4102444800)
         ),
         vol.Optional("notes"): str,
+        vol.Optional("on_schedule"): bool,
     }
 )
 
@@ -89,7 +90,10 @@ async def _refresh_all_coordinators(hass: HomeAssistant) -> None:
     """Refresh all estrannaise coordinators after a data change."""
     for key, val in list(hass.data.get(DOMAIN, {}).items()):
         if isinstance(val, EstrannaisCoordinator):
-            await val.async_request_refresh()
+            try:
+                await val.async_request_refresh()
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Failed to refresh coordinator %s", key)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -186,6 +190,7 @@ def _register_services(hass: HomeAssistant) -> None:
             level_pg_ml=call.data["level_pg_ml"],
             timestamp=ts,
             notes=call.data.get("notes"),
+            on_schedule=call.data.get("on_schedule"),
         )
         await _refresh_all_coordinators(hass)
 
@@ -241,11 +246,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
 
-    # Close database if no more entries
+    # Close database if no more coordinator entries remain
     remaining = [
         eid
-        for eid in hass.data[DOMAIN]
-        if eid not in ("frontend_loaded", "services_registered", "database", "_setup_lock")
+        for eid, val in hass.data[DOMAIN].items()
+        if isinstance(val, EstrannaisCoordinator)
     ]
     if not remaining and "database" in hass.data[DOMAIN]:
         db: EstrannaisDatabase = hass.data[DOMAIN].pop("database")

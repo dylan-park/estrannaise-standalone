@@ -184,6 +184,16 @@ if (!customElements.get('estrannaise-test-button')) {
           <label>Notes (optional)</label>
           <textarea id="test-notes" placeholder="Lab name, fasting status, etc."></textarea>
 
+          <div id="schedule-toggle-section" style="display:none; margin-top: 12px;">
+            <div style="font-size: 13px; color: var(--warning-color, #FF9800); margin-bottom: 8px;">
+              This test is from before your earliest recorded dose.
+            </div>
+            <label style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer;">
+              <input type="checkbox" id="test-on-schedule" checked style="width: 16px; height: 16px;" />
+              <span style="font-size: 13px;">I was on this dosing schedule at test time</span>
+            </label>
+          </div>
+
           <div class="error" id="test-error"></div>
 
           <div class="buttons">
@@ -207,19 +217,24 @@ if (!customElements.get('estrannaise-test-button')) {
       // Bind dialog buttons
       this.shadowRoot.getElementById('test-cancel').addEventListener('click', () => this._closeDialog());
       this.shadowRoot.getElementById('test-submit').addEventListener('click', () => this._submitTest());
+      this.shadowRoot.getElementById('test-datetime').addEventListener('input', () => this._updateScheduleToggle());
     }
 
     _openDialog() {
       const overlay = this.shadowRoot.querySelector('.dialog-overlay');
       overlay.classList.add('open');
 
-      // Pre-fill datetime with current local time
+      // Pre-fill datetime with current local time and block future dates
       const now = new Date();
       const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-      this.shadowRoot.getElementById('test-datetime').value = local.toISOString().slice(0, 16);
+      const dtInput = this.shadowRoot.getElementById('test-datetime');
+      dtInput.value = local.toISOString().slice(0, 16);
+      dtInput.max = local.toISOString().slice(0, 16);
       this.shadowRoot.getElementById('test-level').value = '';
       this.shadowRoot.getElementById('test-notes').value = '';
       this.shadowRoot.getElementById('test-error').textContent = '';
+      this.shadowRoot.getElementById('schedule-toggle-section').style.display = 'none';
+      this.shadowRoot.getElementById('test-on-schedule').checked = true;
 
       // Update unit label
       if (this._hass) {
@@ -240,6 +255,26 @@ if (!customElements.get('estrannaise-test-button')) {
     _closeDialog() {
       const overlay = this.shadowRoot.querySelector('.dialog-overlay');
       overlay.classList.remove('open');
+    }
+
+    _updateScheduleToggle() {
+      const section = this.shadowRoot.getElementById('schedule-toggle-section');
+      const dtInput = this.shadowRoot.getElementById('test-datetime');
+      if (!dtInput.value || !this._hass) { section.style.display = 'none'; return; }
+
+      const timestamp = new Date(dtInput.value).getTime() / 1000;
+      const entity = this._hass.states[this.config.entity];
+      if (!entity) { section.style.display = 'none'; return; }
+
+      const doses = entity.attributes?.doses || [];
+      if (doses.length === 0) {
+        // No doses at all — always show the toggle
+        section.style.display = '';
+        return;
+      }
+
+      const earliestDose = Math.min(...doses.map(d => d.timestamp));
+      section.style.display = (timestamp < earliestDose) ? '' : 'none';
     }
 
     async _submitTest() {
@@ -263,6 +298,12 @@ if (!customElements.get('estrannaise-test-button')) {
       // Convert to unix timestamp
       const timestamp = new Date(datetime).getTime() / 1000;
 
+      // Block future dates
+      if (timestamp > Date.now() / 1000 + 60) {
+        errorEl.textContent = 'Blood test date cannot be in the future.';
+        return;
+      }
+
       // If units are pmol/L, convert back to pg/mL for storage
       let levelPgMl = level;
       if (this._hass) {
@@ -277,12 +318,18 @@ if (!customElements.get('estrannaise-test-button')) {
       errorEl.textContent = '';
 
       try {
-        await this._hass.callService('estrannaise', 'log_blood_test', {
+        const serviceData = {
           entity_id: this.config.entity,
           level_pg_ml: levelPgMl,
           timestamp: timestamp,
           notes: notesInput.value || undefined,
-        });
+        };
+        // Include on_schedule only when the toggle was shown
+        const scheduleSection = this.shadowRoot.getElementById('schedule-toggle-section');
+        if (scheduleSection.style.display !== 'none') {
+          serviceData.on_schedule = this.shadowRoot.getElementById('test-on-schedule').checked;
+        }
+        await this._hass.callService('estrannaise', 'log_blood_test', serviceData);
 
         this._closeDialog();
 
@@ -361,9 +408,10 @@ if (!customElements.get('estrannaise-test-button-editor')) {
       form.addEventListener('value-changed', (ev) => {
         const newData = ev.detail.value;
         this.config = { ...this.config, ...newData };
-        const event = new Event('config-changed', { bubbles: true, composed: true });
-        event.detail = { config: this.config };
-        this.dispatchEvent(event);
+        this.dispatchEvent(new CustomEvent('config-changed', {
+          bubbles: true, composed: true,
+          detail: { config: this.config },
+        }));
       });
 
       this._form = form;

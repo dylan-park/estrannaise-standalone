@@ -125,10 +125,10 @@ function alignToTimeOfDay(nowSec, doseTime, intervalSec) {
     hour = parseInt(parts[0], 10) || 8;
     minute = parseInt(parts[1], 10) || 0;
   }
-  // Find today's dose time (UTC)
+  // Find today's dose time (local timezone, not UTC)
   const nowDate = new Date(nowSec * 1000);
   const todayDose = new Date(nowDate);
-  todayDose.setUTCHours(hour, minute, 0, 0);
+  todayDose.setHours(hour, minute, 0, 0);
   const todayTs = todayDose.getTime() / 1000;
   // Anchor: most recent aligned dose time
   return todayTs > nowSec ? todayTs - intervalSec : todayTs;
@@ -367,19 +367,22 @@ if (!customElements.get('estrannaise-card')) {
         this._plotlyLoaded = true;
         return true;
       }
-      return new Promise((resolve) => {
-        const script = document.createElement('script');
-        script.src = '/estrannaise/plotly-2.35.2.min.js';
-        script.onload = () => {
-          this._plotlyLoaded = true;
-          resolve(true);
-        };
-        script.onerror = () => {
-          console.error('Failed to load Plotly.js');
-          resolve(false);
-        };
-        document.head.appendChild(script);
-      });
+      // Global pending promise prevents duplicate <script> tags
+      if (!window._estrannaisePlotlyLoading) {
+        window._estrannaisePlotlyLoading = new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = '/estrannaise/plotly-2.35.2.min.js';
+          script.onload = () => resolve(true);
+          script.onerror = () => {
+            console.error('Failed to load Plotly.js');
+            resolve(false);
+          };
+          document.head.appendChild(script);
+        });
+      }
+      const ok = await window._estrannaisePlotlyLoading;
+      this._plotlyLoaded = ok;
+      return ok;
     }
 
     async _update() {
@@ -387,6 +390,11 @@ if (!customElements.get('estrannaise-card')) {
 
       const entity = this._hass.states[this.config.entity];
       if (!entity) return;
+
+      // Skip render if entity state hasn't changed since last render
+      const entityKey = entity.last_updated || entity.state;
+      if (this._lastEntityKey === entityKey) return;
+      this._lastEntityKey = entityKey;
 
       const attrs = entity.attributes || {};
       const state = entity.state;
@@ -588,10 +596,15 @@ if (!customElements.get('estrannaise-card')) {
       // Blood test baseline (zero-state handling only)
       // When the PK model predicts ~0 at all blood test times, multiplicative
       // scaling can't work. In that case, the blood test level is used as a
-      // persistent flat offset — it represents E2 from sources the model
-      // can't explain (endogenous production, unlogged doses, etc.).
+      // decaying offset — it represents E2 from sources the model can't
+      // explain (endogenous production, unlogged doses, etc.).
+      // Decays exponentially (λ=0.02/day, ~35d half-life) so old tests fade.
       const baselineE2 = attrs.baseline_e2 || 0;
       const baselineTestTs = attrs.baseline_test_ts || 0;
+      const baselineDecay = (tSec) => {
+        const ageDays = (tSec - baselineTestTs) / 86400;
+        return baselineE2 * Math.exp(-0.02 * Math.max(0, ageDays));
+      };
 
       // Confidence band multipliers (if variance > 0 and enough blood tests)
       const showBands = scalingVariance > 0 && bloodTests.length >= 2;
@@ -607,9 +620,9 @@ if (!customElements.get('estrannaise-card')) {
         }
         let e2 = e2raw * scalingFactor * cf;
 
-        // Add persistent baseline offset (flat, after blood test time)
+        // Add decaying baseline offset (after blood test time)
         if (baselineE2 > 0 && t >= baselineTestTs) {
-          e2 += baselineE2 * cf;
+          e2 += baselineDecay(t) * cf;
         }
 
         if (t <= now) {
@@ -640,7 +653,7 @@ if (!customElements.get('estrannaise-card')) {
         e2NowRaw += computeE2(tDays, dose.dose_mg, dose.model, pkParams, patchWearDays);
       }
       let e2Now = e2NowRaw * scalingFactor * cf;
-      if (baselineE2 > 0 && now >= baselineTestTs) e2Now += baselineE2 * cf;
+      if (baselineE2 > 0 && now >= baselineTestTs) e2Now += baselineDecay(now) * cf;
       histX.push(nowDate);
       histY.push(Math.max(0, e2Now));
       predX.unshift(nowDate);
@@ -775,9 +788,12 @@ if (!customElements.get('estrannaise-card')) {
           if (ts < tMin || ts > tMax) continue;
           testX.push(new Date(ts * 1000));
           testY.push(test.level_pg_ml * cf);
+          const safeNotes = test.notes
+            ? test.notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            : '';
           testText.push(
             `<b>${(test.level_pg_ml * cf).toFixed(0)}</b> ${units}` +
-            (test.notes ? `<br>${test.notes}` : '') +
+            (safeNotes ? `<br>${safeNotes}` : '') +
             `<br>ID: ${test.id}`
           );
         }
@@ -1000,7 +1016,8 @@ if (!customElements.get('estrannaise-card')) {
         }
         let e2 = e2raw * scalingFactor * cf;
         if (baselineE2 > 0 && dose.timestamp >= baselineTestTs) {
-          e2 += baselineE2 * cf;
+          const ageDays = (dose.timestamp - baselineTestTs) / 86400;
+          e2 += baselineE2 * Math.exp(-0.02 * Math.max(0, ageDays)) * cf;
         }
         e2 = Math.max(0, e2);
 
@@ -1040,9 +1057,10 @@ if (!customElements.get('estrannaise-card')) {
       // Store plot bounds for mousemove
       this._spikeBounds = { plotLeft, plotRight, plotTop, plotBottom };
 
-      // Bind events once
-      if (!this._spikeBound) {
+      // Bind events (re-bind if plotEl changed, e.g. after reconnect)
+      if (!this._spikeBound || this._spikeTarget !== this._plotEl) {
         this._spikeBound = true;
+        this._spikeTarget = this._plotEl;
         this._plotEl.addEventListener('mousemove', (e) => this._onSpikeMove(e));
         this._plotEl.addEventListener('mouseleave', () => this._onSpikeLeave());
       }
@@ -1090,6 +1108,11 @@ if (!customElements.get('estrannaise-card')) {
         this._resizeObserver.disconnect();
         this._resizeObserver = null;
       }
+      if (this._plotEl && window.Plotly) {
+        window.Plotly.purge(this._plotEl);
+      }
+      this._spikeBound = false;
+      this._spikeTarget = null;
     }
 
     getCardSize() {
@@ -1187,9 +1210,10 @@ if (!customElements.get('estrannaise-card-editor')) {
         // Suppress the setConfig echo so the form keeps focus
         this._ignoreNextConfig = true;
         this.config = newConfig;
-        const event = new Event('config-changed', { bubbles: true, composed: true });
-        event.detail = { config: this.config };
-        this.dispatchEvent(event);
+        this.dispatchEvent(new CustomEvent('config-changed', {
+          bubbles: true, composed: true,
+          detail: { config: this.config },
+        }));
       });
 
       this.shadowRoot.appendChild(form);

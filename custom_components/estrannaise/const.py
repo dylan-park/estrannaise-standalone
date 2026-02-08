@@ -240,14 +240,14 @@ def compute_suggested_regimen(
 
     intervals = SUGGESTED_INTERVALS.get(model_key, [7.0])
 
-    best: dict[str, Any] | None = None
+    # Use the first (most recommended) valid interval
+    d, k1, k2, k3 = params
     for interval in intervals:
         # Check ≤ 4 doses per week constraint
         if 7.0 / interval > 4.0:
             continue
 
         # Compute steady-state trough per mg dose
-        d, k1, k2, k3 = params
         trough_per_mg = 0.0
         for n in range(1, 60):
             t = n * interval
@@ -270,15 +270,13 @@ def compute_suggested_regimen(
             dose = round(dose * 2) / 2  # 0.5 mg increments
             dose = max(0.5, min(20.0, dose))
 
-        if best is None:
-            best = {
-                "dose_mg": dose,
-                "interval_days": interval,
-                "model_key": model_key,
-            }
-            break  # Prefer first (most recommended) interval
+        return {
+            "dose_mg": dose,
+            "interval_days": interval,
+            "model_key": model_key,
+        }
 
-    return best
+    return None
 
 
 # ── Menstrual cycle reference data (28-day, pg/mL) ──────────────────────────
@@ -441,6 +439,81 @@ def compute_e2_at_time(
         else:
             total += e2_curve_3c(t_days, dose_mg, d, k1, k2, k3)
     return total * scaling_factor
+
+
+def compute_steady_state_e2_at_time(
+    t_target: float,
+    all_configs: list[dict],
+    n_virtual_intervals: int = 20,
+) -> float:
+    """Compute predicted E2 at t_target assuming steady-state dosing.
+
+    Generates virtual doses from each config's schedule around t_target
+    and returns the summed PK prediction. Useful for blood tests that
+    predate recorded dose history.
+    """
+    virtual_doses: list[dict] = []
+    for cfg in all_configs:
+        ester = cfg.get("ester", "")
+        method = cfg.get("method", "")
+        interval_days = cfg.get("interval_days", 7.0)
+        dose_mg = cfg.get("dose_mg", 0.0)
+        dose_time_str = cfg.get("dose_time", "00:00")
+        model_key = resolve_model_key(ester, method, interval_days)
+        if not model_key or model_key not in PK_PARAMETERS:
+            continue
+        if dose_mg <= 0 or interval_days <= 0:
+            continue
+
+        interval_s = interval_days * 86400.0
+
+        # Parse dose_time to seconds-from-midnight
+        try:
+            h, m = map(int, dose_time_str.split(":"))
+        except (ValueError, AttributeError):
+            h, m = 0, 0
+        dose_offset = h * 3600 + m * 60
+
+        # Find the nearest aligned dose time on or before t_target:
+        # Start from midnight of t_target's day + dose_offset, then step
+        # by interval until we pass t_target, then back up one step.
+        import datetime as _dt
+        try:
+            from homeassistant.util import dt as dt_util
+            local_tz = dt_util.DEFAULT_TIME_ZONE
+        except ImportError:
+            local_tz = _dt.timezone.utc
+
+        dt_target = _dt.datetime.fromtimestamp(t_target, tz=local_tz)
+        dose_at_target_day = dt_target.replace(
+            hour=h, minute=m, second=0, microsecond=0
+        )
+        anchor = dose_at_target_day.timestamp()
+        if anchor > t_target:
+            anchor -= 86400  # use previous day's dose time
+
+        # Align: find the dose time closest to (but <= t_target) in the cycle
+        # Walk forward from a far-past anchor to avoid modular arithmetic issues
+        far_past = anchor - n_virtual_intervals * interval_s
+        t = far_past
+        last_before = far_past
+        while t <= t_target:
+            last_before = t
+            t += interval_s
+        anchor = last_before
+
+        # Generate n_virtual_intervals doses ending at anchor
+        for i in range(n_virtual_intervals):
+            dose_ts = anchor - i * interval_s
+            virtual_doses.append({
+                "timestamp": dose_ts,
+                "model": model_key,
+                "dose_mg": dose_mg,
+            })
+
+    if not virtual_doses:
+        return 0.0
+    return compute_e2_at_time(t_target, virtual_doses, scaling_factor=1.0)
 
 
 # ── Cycle-fitting algorithm (menstrual range auto-regimen) ──────────────────

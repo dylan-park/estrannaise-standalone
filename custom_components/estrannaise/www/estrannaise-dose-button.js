@@ -514,9 +514,10 @@ if (!customElements.get('estrannaise-dose-button-editor')) {
         // Remove 'auto' / empty optional fields so they fall back to entity defaults
         if (!this.config.model || this.config.model === 'auto') delete this.config.model;
         if (!this.config.dose_mg) delete this.config.dose_mg;
-        const event = new Event('config-changed', { bubbles: true, composed: true });
-        event.detail = { config: this.config };
-        this.dispatchEvent(event);
+        this.dispatchEvent(new CustomEvent('config-changed', {
+          bubbles: true, composed: true,
+          detail: { config: this.config },
+        }));
       });
 
       this._form = form;

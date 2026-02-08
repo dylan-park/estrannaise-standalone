@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -21,7 +22,6 @@ from .const import (
     MODE_BOTH,
     compute_suggested_regimen,
     get_dose_units,
-    resolve_model_key,
 )
 from .coordinator import EstrannaisCoordinator
 
@@ -72,7 +72,7 @@ class EstrannaisCalendar(
             return None
 
         now = datetime.now(timezone.utc)
-        future = [e for e in events if e.start >= now]
+        future = [e for e in events if e.end >= now]
         if future:
             future.sort(key=lambda e: e.start)
             return future[0]
@@ -144,6 +144,13 @@ class EstrannaisCalendar(
             minute = max(0, min(59, minute))
 
             now = datetime.now(timezone.utc)
+            local_tz = dt_util.DEFAULT_TIME_ZONE
+            now_local = now.astimezone(local_tz)
+
+            # Compute today's dose time in local timezone (→ UTC timestamp)
+            today_dose_local = now_local.replace(
+                hour=hour, minute=minute, second=0, microsecond=0
+            )
 
             schedules = None
             if cfg.get("auto_regimen", False):
@@ -162,18 +169,33 @@ class EstrannaisCalendar(
                 schedules = [{
                     "dose_mg": cfg.get("dose_mg", 0),
                     "interval_days": cfg.get("interval_days", 7),
-                    "phase_days": 0,
+                    "phase_days": cfg.get("phase_days", 0),
                 }]
 
             for sch in schedules:
                 dose_mg = sch["dose_mg"]
-                interval = timedelta(days=sch["interval_days"])
+                interval_days_val = sch["interval_days"]
+                interval = timedelta(days=interval_days_val)
                 if interval.total_seconds() <= 0:
                     continue
-                today_dose = now.replace(
-                    hour=hour, minute=minute, second=0, microsecond=0
-                )
-                next_dose = today_dose if today_dose > now else today_dose + interval
+                phase_days_val = sch.get("phase_days", 0)
+                if phase_days_val and phase_days_val > 0:
+                    # Phase-based anchoring (matches coordinator logic)
+                    epoch_day_local = int(now_local.replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    ).timestamp() // 86400)
+                    cycle_day_now = epoch_day_local % 28
+                    days_back = (cycle_day_now - int(phase_days_val)) % 28
+                    anchor_ts = today_dose_local.timestamp() - days_back * 86400.0
+                    t = anchor_ts
+                    interval_sec = interval_days_val * 86400.0
+                    now_ts = now.timestamp()
+                    while t <= now_ts:
+                        t += interval_sec
+                    next_dose = datetime.fromtimestamp(t, tz=timezone.utc)
+                else:
+                    today_dose_utc = today_dose_local.astimezone(timezone.utc)
+                    next_dose = today_dose_utc if today_dose_utc > now else today_dose_utc + interval
                 while next_dose < now + timedelta(days=30):
                     raw_doses.append({
                         "dt": next_dose, "ester": ester, "dose_mg": dose_mg,

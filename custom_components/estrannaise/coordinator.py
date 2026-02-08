@@ -130,6 +130,7 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> list[dict[str, Any]]:
         """Generate synthetic dose records for a config's recurring schedule."""
         from datetime import datetime, timezone
+        from homeassistant.util import dt as dt_util
 
         mode = config["mode"]
         if mode not in (MODE_AUTOMATIC, MODE_BOTH):
@@ -142,7 +143,7 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if interval_days <= 0:
             return []
 
-        # Align to time-of-day
+        # Align to time-of-day (in HA's configured local timezone)
         dose_time = config.get("dose_time", "08:00")
         try:
             parts = dose_time.split(":")
@@ -152,6 +153,16 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hour, minute = 8, 0
         hour = max(0, min(23, hour))
         minute = max(0, min(59, minute))
+
+        local_tz = dt_util.DEFAULT_TIME_ZONE
+
+        def _local_dose_anchor(ref_ts: float) -> float:
+            """Get the UTC timestamp of today's dose time in the user's timezone."""
+            ref_dt = datetime.fromtimestamp(ref_ts, tz=local_tz)
+            local_dose = ref_dt.replace(
+                hour=hour, minute=minute, second=0, microsecond=0
+            )
+            return local_dose.timestamp()
 
         # If auto_regimen is enabled, use suggested regimen values
         cycle_fit = None
@@ -170,9 +181,13 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if cycle_fit:
             # Multi-schedule cycle fit: generate future doses per schedule
-            epoch_day_now = int(now // 86400)
-            cycle_day_now = epoch_day_now % 28
-            tod_sec = hour * 3600 + minute * 60
+            today_anchor = _local_dose_anchor(now)
+            # Use local-time day for cycle phase calculation
+            now_local = datetime.fromtimestamp(now, tz=local_tz)
+            epoch_day_local = int(now_local.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ).timestamp() // 86400)
+            cycle_day_now = epoch_day_local % 28
 
             for sch in cycle_fit["schedules"]:
                 sch_dose = sch["dose_mg"]
@@ -185,8 +200,7 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 # Anchor to most recent cycle day matching the phase
                 days_back = (cycle_day_now - sch_phase) % 28
-                anchor_day = epoch_day_now - days_back
-                anchor_ts = anchor_day * 86400.0 + tod_sec
+                anchor_ts = today_anchor - days_back * 86400.0
 
                 # Step forward to next future dose
                 t = anchor_ts
@@ -212,15 +226,17 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return []
 
             phase_days = config.get("phase_days", 0.0)
-            tod_sec = hour * 3600 + minute * 60
 
             if phase_days and phase_days > 0:
                 # Phase-based anchoring (from cycle fit discrete entry)
-                epoch_day_now = int(now // 86400)
-                cycle_day_now = epoch_day_now % 28
+                today_anchor = _local_dose_anchor(now)
+                now_local = datetime.fromtimestamp(now, tz=local_tz)
+                epoch_day_local = int(now_local.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                ).timestamp() // 86400)
+                cycle_day_now = epoch_day_local % 28
                 days_back = (cycle_day_now - int(phase_days)) % 28
-                anchor_day = epoch_day_now - days_back
-                anchor_ts = anchor_day * 86400.0 + tod_sec
+                anchor_ts = today_anchor - days_back * 86400.0
 
                 t = anchor_ts
                 while t <= now:
@@ -238,14 +254,11 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     t += interval_sec
             else:
                 # Standard anchoring (today's dose time)
-                now_dt = datetime.fromtimestamp(now, tz=timezone.utc)
-                today_dose = now_dt.replace(
-                    hour=hour, minute=minute, second=0, microsecond=0
-                )
-                if today_dose > now_dt:
-                    anchor = today_dose.timestamp() - interval_sec
+                today_dose_ts = _local_dose_anchor(now)
+                if today_dose_ts > now:
+                    anchor = today_dose_ts - interval_sec
                 else:
-                    anchor = today_dose.timestamp()
+                    anchor = today_dose_ts
 
                 t = anchor + interval_sec
                 while t <= future_limit:
@@ -271,7 +284,8 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         pharmacokinetic lookback window and *now*, checks which are already
         persisted, and inserts the missing ones.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
+        from homeassistant.util import dt as dt_util
 
         mode = config.get("mode", "manual")
         if mode not in (MODE_AUTOMATIC, MODE_BOTH):
@@ -281,7 +295,7 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ester = config["ester"]
         method = config["method"]
 
-        # Parse dose time-of-day
+        # Parse dose time-of-day (in HA's configured local timezone)
         dose_time_str = config.get("dose_time", "08:00")
         try:
             parts = dose_time_str.split(":")
@@ -291,7 +305,8 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hour, minute = 8, 0
         hour = max(0, min(23, hour))
         minute = max(0, min(59, minute))
-        tod_sec = hour * 3600 + minute * 60
+
+        local_tz = dt_util.DEFAULT_TIME_ZONE
 
         # Resolve schedule(s)
         schedules: list[dict[str, Any]] = []
@@ -346,19 +361,22 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # No backfill: only catch doses since the last refresh
                 lookback_ts = now - DEFAULT_UPDATE_INTERVAL - 60
 
-            # Compute anchor timestamp
+            # Compute anchor timestamp (in user's local timezone)
+            now_local = datetime.fromtimestamp(now, tz=local_tz)
+            today_dose = now_local.replace(
+                hour=hour, minute=minute, second=0, microsecond=0
+            )
+            today_dose_ts = today_dose.timestamp()
+
             if sch_phase > 0:
-                epoch_day_now = int(now // 86400)
-                cycle_day_now = epoch_day_now % 28
+                epoch_day_local = int(now_local.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                ).timestamp() // 86400)
+                cycle_day_now = epoch_day_local % 28
                 days_back = (cycle_day_now - int(sch_phase)) % 28
-                anchor_day = epoch_day_now - days_back
-                anchor_ts = anchor_day * 86400.0 + tod_sec
+                anchor_ts = today_dose_ts - days_back * 86400.0
             else:
-                now_dt = datetime.fromtimestamp(now, tz=timezone.utc)
-                today_dose = now_dt.replace(
-                    hour=hour, minute=minute, second=0, microsecond=0
-                )
-                anchor_ts = today_dose.timestamp()
+                anchor_ts = today_dose_ts
 
             # Walk back to find earliest dose within lookback window
             t = anchor_ts
@@ -412,7 +430,7 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Compute scaling factor and variance
         scaling_factor, scaling_variance = await self.database.compute_scaling_factor(
-            entry_id, combined_doses
+            entry_id, combined_doses, all_configs=all_configs
         )
 
         # Compute current E2 level
@@ -439,23 +457,33 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # as a persistent baseline offset. The blood test represents the
         # individual's actual E2 from sources the PK model can't explain
         # (endogenous production, unlogged doses, etc.) — assumed to persist.
+        # Tests marked on_schedule=True are handled by virtual steady-state
+        # in compute_scaling_factor() and should not trigger baseline mode.
         baseline_e2 = 0.0
         baseline_test_ts = 0.0
-        if all_blood_tests:
+        baseline_candidates = [
+            bt for bt in all_blood_tests
+            if not bt.get("on_schedule")
+        ]
+        if baseline_candidates:
             all_negligible = all(
                 compute_e2_at_time(bt["timestamp"], combined_doses) < 1.0
-                for bt in all_blood_tests
+                for bt in baseline_candidates
             )
             if all_negligible:
-                latest = max(all_blood_tests, key=lambda t: t["timestamp"])
+                latest = max(baseline_candidates, key=lambda t: t["timestamp"])
                 baseline_e2 = latest["level_pg_ml"]
                 baseline_test_ts = latest["timestamp"]
 
-        # Include baseline in displayed E2 value and reset bogus scaling
+        # Add baseline to displayed E2 value and reset bogus scaling
+        # Decay baseline exponentially so old tests fade out (λ=0.02/day, ~35d half-life)
         if baseline_e2 > 0:
+            import math
+            age_days = (now - baseline_test_ts) / 86400.0
+            baseline_decayed = baseline_e2 * math.exp(-0.02 * max(0, age_days))
             scaling_factor = 1.0
             scaling_variance = 0.0
-            current_e2 = baseline_e2 * cf
+            current_e2 += baseline_decayed * cf
 
         return {
             "doses": all_manual_doses,

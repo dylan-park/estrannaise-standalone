@@ -8,8 +8,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 
-from homeassistant.helpers import entity_registry as er
-
 from .const import (
     CONF_AUTO_REGIMEN,
     CONF_BACKFILL_DOSES,

@@ -75,8 +75,11 @@ class EstrannaiseSensor(
         """Initialize the sensor."""
         super().__init__(coordinator)
         ester_key = entry.data.get("ester", "")
+        method_key = entry.data.get("method", "")
         ester_name = ESTERS.get(ester_key, entry.data.get("label", "HRT"))
-        self._attr_name = f"Estrannaise {ester_name}"
+        method_name = METHODS.get(method_key, "")
+        suffix = f" ({method_name})" if method_name else ""
+        self._attr_name = f"Estrannaise {ester_name}{suffix}"
         self._attr_unique_id = f"{entry.entry_id}_e2_level"
         self._entry = entry
 

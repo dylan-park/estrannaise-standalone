@@ -15,7 +15,7 @@ from .const import PK_PARAMETERS, PATCH_WEAR_DAYS, terminal_elimination_days
 
 _LOGGER = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 CREATE_TABLES = """
 CREATE TABLE IF NOT EXISTS doses (
@@ -62,6 +62,25 @@ class EstrannaisDatabase:
         await self._db.execute("PRAGMA busy_timeout = 5000")
         await self._db.executescript(CREATE_TABLES)
         await self._db.commit()
+
+        # Schema migration: add on_schedule column (v2)
+        cursor = await self._db.execute("PRAGMA user_version")
+        row = await cursor.fetchone()
+        db_version = row[0] if row else 0
+        if db_version < 2:
+            try:
+                await self._db.execute(
+                    "ALTER TABLE blood_tests ADD COLUMN on_schedule INTEGER"
+                )
+            except Exception as exc:  # noqa: BLE001
+                # "duplicate column name" means column already exists — safe to skip
+                if "duplicate column" not in str(exc).lower():
+                    _LOGGER.warning("Schema migration failed: %s", exc)
+                    raise
+            await self._db.execute("PRAGMA user_version = 2")
+            await self._db.commit()
+            _LOGGER.info("Estrannaise database migrated to schema v2")
+
         _LOGGER.debug("Estrannaise database initialized at %s", self._db_path)
 
     async def async_close(self) -> None:
@@ -92,7 +111,8 @@ class EstrannaisDatabase:
                 (config_entry_id, ts, model, dose_mg, source, now),
             )
             await self._db.commit()
-        return cursor.lastrowid  # type: ignore[return-value]
+            row_id = cursor.lastrowid
+        return row_id  # type: ignore[return-value]
 
     async def get_doses(
         self,
@@ -161,20 +181,26 @@ class EstrannaisDatabase:
         level_pg_ml: float,
         timestamp: float | None = None,
         notes: str | None = None,
+        on_schedule: bool | None = None,
     ) -> int:
         """Record a blood test result. Returns the new row ID."""
         now = time.time()
         ts = timestamp if timestamp is not None else now
         if self._db is None:
             raise RuntimeError("Estrannaise database is not initialized")
+        on_sched_int = (
+            int(on_schedule) if on_schedule is not None else None
+        )
         async with self._write_lock:
             cursor = await self._db.execute(
-                "INSERT INTO blood_tests (config_entry_id, timestamp, level_pg_ml, notes, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (config_entry_id, ts, level_pg_ml, notes, now),
+                "INSERT INTO blood_tests "
+                "(config_entry_id, timestamp, level_pg_ml, notes, created_at, on_schedule) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (config_entry_id, ts, level_pg_ml, notes, now, on_sched_int),
             )
             await self._db.commit()
-        return cursor.lastrowid  # type: ignore[return-value]
+            row_id = cursor.lastrowid
+        return row_id  # type: ignore[return-value]
 
     async def get_blood_tests(
         self, config_entry_id: str
@@ -183,7 +209,7 @@ class EstrannaisDatabase:
         if self._db is None:
             raise RuntimeError("Estrannaise database is not initialized")
         cursor = await self._db.execute(
-            "SELECT id, config_entry_id, timestamp, level_pg_ml, notes "
+            "SELECT id, config_entry_id, timestamp, level_pg_ml, notes, on_schedule "
             "FROM blood_tests WHERE config_entry_id = ? "
             "ORDER BY timestamp ASC",
             (config_entry_id,),
@@ -196,7 +222,7 @@ class EstrannaisDatabase:
         if self._db is None:
             raise RuntimeError("Estrannaise database is not initialized")
         cursor = await self._db.execute(
-            "SELECT id, config_entry_id, timestamp, level_pg_ml, notes "
+            "SELECT id, config_entry_id, timestamp, level_pg_ml, notes, on_schedule "
             "FROM blood_tests ORDER BY timestamp ASC",
         )
         rows = await cursor.fetchall()
@@ -234,6 +260,7 @@ class EstrannaisDatabase:
         self,
         config_entry_id: str,
         all_doses: list[dict[str, Any]],
+        all_configs: list[dict[str, Any]] | None = None,
         decay_lambda: float = 0.02,
     ) -> tuple[float, float]:
         """Compute exponentially-weighted scaling factor from blood tests.
@@ -241,11 +268,15 @@ class EstrannaisDatabase:
         For each blood test, compares measured level to predicted level from
         the PK model at that timestamp. Recent tests are weighted more heavily.
 
+        For tests marked on_schedule=True where predicted E2 is negligible
+        (no dose records that far back), virtual steady-state doses are
+        generated from all_configs to produce a meaningful prediction.
+
         decay_lambda: exponential decay rate for weighting (per day).
         Returns (factor, variance) where factor is clamped to [0.0, 2.0].
         Returns (1.0, 0.0) if no usable tests.
         """
-        from .const import compute_e2_at_time
+        from .const import compute_e2_at_time, compute_steady_state_e2_at_time
 
         tests = await self.get_all_blood_tests()
         if not tests:
@@ -261,7 +292,14 @@ class EstrannaisDatabase:
                 test["timestamp"], all_doses, scaling_factor=1.0
             )
             if predicted < 1.0:
-                continue
+                # Try virtual steady-state for on_schedule tests
+                on_schedule = test.get("on_schedule")
+                if on_schedule and all_configs:
+                    predicted = compute_steady_state_e2_at_time(
+                        test["timestamp"], all_configs
+                    )
+                if predicted < 1.0:
+                    continue
 
             ratio = test["level_pg_ml"] / predicted
             age_days = (now - test["timestamp"]) / 86400.0

@@ -78,6 +78,15 @@ log_blood_test:
       required: false
       selector:
         text:
+    on_schedule:
+      name: On schedule at test time
+      description: >
+        Were you on the current dosing schedule when this blood test was taken?
+        If yes, virtual steady-state doses are used to compute a predicted level
+        for calibration. If no, the test may be used as a baseline estimate.
+      required: false
+      selector:
+        boolean:
 
 delete_dose:
   name: Delete a dose

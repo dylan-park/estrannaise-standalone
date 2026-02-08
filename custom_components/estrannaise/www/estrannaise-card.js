@@ -491,7 +491,10 @@ if (!customElements.get('estrannaise-card')) {
 
         if (cfg.auto_regimen && cycleFitRegimen && cycleFitRegimen.schedules) {
           // Multi-schedule cycle fit: generate per-schedule auto-doses
-          const epochDayNow = Math.floor(now / 86400);
+          // Use local timezone for epoch day (matches Python coordinator)
+          const nowDate0 = new Date(now * 1000);
+          const localMid0 = new Date(nowDate0.getFullYear(), nowDate0.getMonth(), nowDate0.getDate());
+          const epochDayNow = Math.floor(localMid0.getTime() / 86400000);
           const cycleDayNow = ((epochDayNow % 28) + 28) % 28;
           let hour = 8, minute = 0;
           if (doseTime) {
@@ -499,14 +502,13 @@ if (!customElements.get('estrannaise-card')) {
             hour = parseInt(parts[0], 10) || 8;
             minute = parseInt(parts[1], 10) || 0;
           }
-          const todSec = hour * 3600 + minute * 60;
 
           for (const sch of cycleFitRegimen.schedules) {
             const schIntervalSec = sch.interval_days * 86400;
             const schPhase = Math.floor(sch.phase_days);
             const daysBack = ((cycleDayNow - schPhase) % 28 + 28) % 28;
-            const anchorDay = epochDayNow - daysBack;
-            let t = anchorDay * 86400 + todSec;
+            const anchorDate = new Date(nowDate0.getFullYear(), nowDate0.getMonth(), nowDate0.getDate() - daysBack, hour, minute, 0, 0);
+            let t = anchorDate.getTime() / 1000;
             while (t <= now) t += schIntervalSec;
             while (t <= tMax) {
               allDoses.push({
@@ -532,7 +534,10 @@ if (!customElements.get('estrannaise-card')) {
           const phaseDays = cfg.phase_days || 0;
           if (phaseDays > 0) {
             // Phase-based anchoring (28-day cycle alignment)
-            const epochDayNow = Math.floor(now / 86400);
+            // Use local timezone for epoch day (matches Python coordinator)
+            const nowDate1 = new Date(now * 1000);
+            const localMid1 = new Date(nowDate1.getFullYear(), nowDate1.getMonth(), nowDate1.getDate());
+            const epochDayNow = Math.floor(localMid1.getTime() / 86400000);
             const cycleDayNow = ((epochDayNow % 28) + 28) % 28;
             let hour = 8, minute = 0;
             if (doseTime) {
@@ -540,10 +545,9 @@ if (!customElements.get('estrannaise-card')) {
               hour = parseInt(parts[0], 10) || 8;
               minute = parseInt(parts[1], 10) || 0;
             }
-            const todSec = hour * 3600 + minute * 60;
             const daysBack = ((cycleDayNow - Math.floor(phaseDays)) % 28 + 28) % 28;
-            const anchorDay = epochDayNow - daysBack;
-            let t = anchorDay * 86400 + todSec;
+            const anchorDate = new Date(nowDate1.getFullYear(), nowDate1.getMonth(), nowDate1.getDate() - daysBack, hour, minute, 0, 0);
+            let t = anchorDate.getTime() / 1000;
             while (t <= now) t += intervalSec;
             while (t <= tMax) {
               allDoses.push({

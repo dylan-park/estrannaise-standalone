@@ -1,0 +1,186 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Estrannaise HRT Monitor",
+        "description": "Set up estrogen level monitoring. Choose how to configure your dosing regimen.\n\nNote: This integration provides pharmacokinetic APPROXIMATIONS of blood serum levels based on population models. Individual results may vary significantly. Always confirm with blood tests.",
+        "data": {
+          "setup_mode": "Configuration method"
+        }
+      },
+      "ester": {
+        "title": "Estradiol Ester",
+        "description": "Select the estradiol ester you use.",
+        "data": {
+          "ester": "Estradiol ester"
+        }
+      },
+      "method": {
+        "title": "Dosing Method",
+        "description": "Select how the estradiol will be administered.",
+        "data": {
+          "method": "Dosing method"
+        }
+      },
+      "auto_target": {
+        "title": "Target Range",
+        "description": "Choose the target estradiol range. The integration will auto-compute dose and interval to approximate this target.",
+        "data": {
+          "target_type": "Target range"
+        }
+      },
+      "confirm_schedules": {
+        "title": "Confirm Auto-Generated Schedules",
+        "description": "The following {count} dosing schedules will be created for {ester} ({method}): {schedules}. Each schedule will appear as a separate entity that you can adjust individually."
+      },
+      "regimen": {
+        "title": "Dosing Regimen",
+        "description": "Configure your dosing schedule. Dose amount is in {dose_unit}.",
+        "data": {
+          "dose_mg": "Dose amount ({dose_unit})",
+          "interval_days": "Dosing interval (days)",
+          "mode": "Tracking mode",
+          "dose_time": "Dose time of day (HH:MM)",
+          "phase_days": "Cycle day offset (0-27)"
+        }
+      },
+      "settings": {
+        "title": "Display & Integration Settings",
+        "data": {
+          "units": "Measurement units",
+          "enable_calendar": "Add dose schedule to HA calendar",
+          "backfill_doses": "Backfill past doses (enable if already on HRT)"
+        }
+      },
+      "guided_method": {
+        "title": "How Do You Take Estrogen?",
+        "description": "Select the form of estrogen you use.",
+        "data": {
+          "guided_method": "Estrogen form"
+        }
+      },
+      "guided_pill_dose": {
+        "title": "Pill Strength",
+        "description": "How many milligrams of estradiol is in each pill? This is usually printed on the pill or bottle label.",
+        "data": {
+          "pill_mg": "Milligrams per pill"
+        }
+      },
+      "guided_pill_count": {
+        "title": "Number of Pills",
+        "description": "How many pills do you take at a time?",
+        "data": {
+          "pill_count": "Pills per dose"
+        }
+      },
+      "guided_injection_ester": {
+        "title": "Injection Type",
+        "description": "What type of estradiol do you inject? This should be printed on your vial label.",
+        "data": {
+          "injection_ester": "Estradiol type"
+        }
+      },
+      "guided_injection_route": {
+        "title": "Injection Route",
+        "description": "How do you inject?",
+        "data": {
+          "injection_route": "Injection method"
+        }
+      },
+      "guided_injection_strength": {
+        "title": "Vial Concentration",
+        "description": "What is the concentration of your vial? It should say on the label, e.g. '20 mg/mL'.",
+        "data": {
+          "concentration_mg": "Milligrams (mg)",
+          "concentration_ml": "Per milliliters (mL)"
+        }
+      },
+      "guided_injection_volume": {
+        "title": "Injection Volume",
+        "description": "How many mL do you inject each time?",
+        "data": {
+          "injection_volume": "mL per injection"
+        }
+      },
+      "guided_patch_strength": {
+        "title": "Patch Strength",
+        "description": "What is the delivery rate of your patch? This is printed on the patch box.",
+        "data": {
+          "patch_strength": "Patch delivery rate"
+        }
+      },
+      "guided_patch_count": {
+        "title": "Number of Patches",
+        "description": "How many patches do you wear at the same time?",
+        "data": {
+          "patch_count": "Patches at a time"
+        }
+      },
+      "guided_patch_schedule": {
+        "title": "Patch Schedule",
+        "description": "How often do you change your patches?",
+        "data": {
+          "patch_schedule": "Change frequency"
+        }
+      },
+      "guided_schedule": {
+        "title": "Dosing Frequency",
+        "description": "How often do you take your dose, in days? For example, every 5 days = 5.",
+        "data": {
+          "interval_days": "Days between doses"
+        }
+      },
+      "guided_dose_time": {
+        "title": "Dose Time",
+        "description": "What time of day do you usually dose? Use 24-hour format (HH:MM).",
+        "data": {
+          "dose_time": "Time of day (HH:MM)"
+        }
+      },
+      "guided_days_until": {
+        "title": "Next Dose",
+        "description": "How many days from now until your next dose? Enter 0 if your next dose is today.",
+        "data": {
+          "days_until": "Days until next dose"
+        }
+      },
+      "guided_backfill": {
+        "title": "Existing Schedule",
+        "description": "Have you already been {action} this schedule for a while? If yes, past doses will be backfilled so the chart shows a complete history.",
+        "data": {
+          "been_on_schedule": "Already on this schedule"
+        }
+      }
+    },
+    "error": {
+      "unknown": "An unexpected error occurred.",
+      "invalid_combination": "This ester/method combination is not available.",
+      "not_yet_supported": "This combination is not yet supported.",
+      "oral_estradiol_only": "Oral dosing is only available for micronized Estradiol, not esterified forms."
+    },
+    "abort": {
+      "already_configured": "This regimen is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Estrannaise Options",
+        "description": "Estimated levels are pharmacokinetic approximations, not actual blood serum measurements.",
+        "data": {
+          "ester": "Estradiol ester",
+          "method": "Dosing method",
+          "dose_mg": "Dose amount ({dose_unit})",
+          "interval_days": "Dosing interval (days)",
+          "mode": "Tracking mode",
+          "dose_time": "Dose time of day (HH:MM)",
+          "phase_days": "Cycle day offset (0-27)",
+          "units": "Measurement units",
+          "enable_calendar": "Add dose schedule to HA calendar",
+          "backfill_doses": "Backfill past doses (enable if already on HRT)",
+          "reset_data": "Reset all saved data (doses and blood tests)"
+        }
+      }
+    }
+  }
+}

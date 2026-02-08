@@ -1115,6 +1115,11 @@ if (!customElements.get('estrannaise-card')) {
       this._spikeTarget = null;
     }
 
+    connectedCallback() {
+      this._lastEntityKey = null;
+      if (this._hass && this.config) this._update();
+    }
+
     getCardSize() {
       return 5;
     }

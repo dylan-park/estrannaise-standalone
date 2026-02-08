@@ -1,21 +1,13 @@
 {
   "domain": "estrannaise",
   "name": "Estrannaise HRT Monitor",
-  "codeowners": [
-    "@PersephoneKarnstein"
-  ],
+  "after_dependencies": ["frontend"],
+  "codeowners": ["@PersephoneKarnstein"],
   "config_flow": true,
-  "dependencies": [
-    "http"
-  ],
-  "after_dependencies": [
-    "frontend"
-  ],
+  "dependencies": ["http"],
   "documentation": "https://github.com/PersephoneKarnstein/ha-estrannaise",
   "iot_class": "local_push",
-  "requirements": [
-    "aiosqlite==0.20.0"
-  ],
-  "version": "3.5.1",
-  "issue_tracker": "https://github.com/PersephoneKarnstein/ha-estrannaise/issues"
+  "issue_tracker": "https://github.com/PersephoneKarnstein/ha-estrannaise/issues",
+  "requirements": ["aiosqlite==0.20.0"],
+  "version": "3.5.1"
 }

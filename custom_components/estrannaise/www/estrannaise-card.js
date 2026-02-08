@@ -286,8 +286,9 @@ if (!customElements.get('estrannaise-card')) {
         }
         .plot-container {
           width: 100%;
-          min-height: 300px;
+          height: 300px;
           position: relative;
+          overflow: hidden;
         }
         .dose-spike {
           position: absolute;
@@ -969,7 +970,7 @@ if (!customElements.get('estrannaise-card')) {
         if (!this._resizeObserver) {
           this._resizeObserver = new ResizeObserver(() => {
             if (this._plotEl && window.Plotly) {
-              window.Plotly.Plots.resize(this._plotEl);
+              window.Plotly.relayout(this._plotEl, { height: 300 });
             }
           });
           this._resizeObserver.observe(this._plotEl);

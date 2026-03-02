@@ -31,11 +31,7 @@ Oral micronized estradiol is modeled using the same three-compartment framework 
 
 ### HACS (Recommended)
 
-1. Open HACS in your HA instance
-2. Go to **Integrations** > three-dot menu > **Custom repositories**
-3. Add `https://github.com/PersephoneKarnstein/ha-estrannaise` with category **Integration**
-4. Search for "Estrannaise HRT Monitor" and install
-5. Restart Home Assistant
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=PersephoneKarnstein&repository=ha-estrannaise)
 
 ### Manual
 

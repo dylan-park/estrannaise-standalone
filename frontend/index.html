@@ -268,6 +268,7 @@
             .field input[type="number"],
             .field input[type="datetime-local"],
             .field input[type="date"],
+            .field input[type="time"],
             .field input[type="text"],
             .field textarea {
                 width: 100%;
@@ -720,8 +721,8 @@
                         <input
                             type="text"
                             id="reg-dose-time"
-                            value="08:00"
-                            placeholder="HH:MM"
+                            value="8:00 AM"
+                            placeholder="e.g. 8:00 AM"
                         />
                     </div>
                 </div>
@@ -1484,7 +1485,7 @@
                                 symbol: "triangle-up",
                             },
                             hovertemplate:
-                                "<b>%{text}</b><br>%{x|%b %d %H:%M}<extra></extra>",
+                                "<b>%{text}</b><br>%{x|%b %d %I:%M %p}<extra></extra>",
                             text: mTxt,
                             cliponaxis: false,
                         });
@@ -1502,7 +1503,7 @@
                                 opacity: 0.4,
                             },
                             hovertemplate:
-                                "<b>%{text}</b><br>%{x|%b %d %H:%M}<extra></extra>",
+                                "<b>%{text}</b><br>%{x|%b %d %I:%M %p}<extra></extra>",
                             text: aTxt,
                             cliponaxis: false,
                         });
@@ -1551,7 +1552,7 @@
                         type: "date",
                         gridcolor: gridColor,
                         linecolor: gridColor,
-                        tickformat: "%b %d\n%H:%M",
+                        tickformat: "%b %d\n%I:%M %p",
                         range: [new Date(tMin * 1000), new Date(tMax * 1000)],
                         fixedrange: true,
                     },
@@ -2035,6 +2036,28 @@
                     updateMethodOptions(e.target.value, null);
                 });
 
+            // Convert stored 24h "HH:MM" to display "H:MM AM/PM"
+            function to12h(hhmm) {
+                const [h, m] = (hhmm || "08:00").split(":").map(Number);
+                const period = h < 12 ? "AM" : "PM";
+                const hour = h % 12 || 12;
+                return `${hour}:${String(m).padStart(2, "0")} ${period}`;
+            }
+
+            // Convert display "H:MM AM/PM" (or "H:MM am/pm") back to stored "HH:MM"
+            function to24h(ampm) {
+                const match = (ampm || "")
+                    .trim()
+                    .match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+                if (!match) return "08:00"; // fallback for unrecognised input
+                let h = parseInt(match[1], 10);
+                const m = parseInt(match[2], 10);
+                const period = match[3].toUpperCase();
+                if (period === "AM" && h === 12) h = 0;
+                if (period === "PM" && h !== 12) h += 12;
+                return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+            }
+
             function openRegimenEditor(index) {
                 editingRegimenIndex = index;
                 const reg =
@@ -2053,9 +2076,9 @@
                 document.getElementById("reg-mode").value = reg
                     ? reg.mode || "manual"
                     : "manual";
-                document.getElementById("reg-dose-time").value = reg
-                    ? reg.dose_time || "08:00"
-                    : "08:00";
+                document.getElementById("reg-dose-time").value = to12h(
+                    reg ? reg.dose_time || "08:00" : "08:00",
+                );
                 document.getElementById("reg-backfill").checked = reg
                     ? !!reg.backfill_doses
                     : false;
@@ -2088,8 +2111,9 @@
                             ) || 7,
                         mode: document.getElementById("reg-mode").value,
                         dose_time:
-                            document.getElementById("reg-dose-time").value ||
-                            "08:00",
+                            to24h(
+                                document.getElementById("reg-dose-time").value,
+                            ) || "08:00",
                         backfill_doses:
                             document.getElementById("reg-backfill").checked,
                         start_date: startDateVal || "",

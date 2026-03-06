@@ -1,0 +1,2100 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Estrannaise HRT Monitor</title>
+        <script src="/static/plotly-2.35.2.min.js"></script>
+        <style>
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            :root {
+                --bg: #f5f5f5;
+                --card-bg: #ffffff;
+                --text: #212121;
+                --text-secondary: #757575;
+                --primary: #e91e63;
+                --primary-light: rgba(233, 30, 99, 0.12);
+                --accent: #03a9f4;
+                --divider: #e0e0e0;
+                --success: #4caf50;
+                --error: #f44336;
+                --radius: 12px;
+                --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.2);
+            }
+
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg: #121212;
+                    --card-bg: #1e1e1e;
+                    --text: #e0e0e0;
+                    --text-secondary: #9e9e9e;
+                    --divider: #333;
+                    --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+                    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+                }
+            }
+
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                min-height: 100vh;
+                padding: 16px;
+            }
+
+            header {
+                max-width: 900px;
+                margin: 0 auto 20px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+
+            header h1 {
+                font-size: 22px;
+                font-weight: 600;
+                color: var(--primary);
+            }
+
+            .header-actions {
+                display: flex;
+                gap: 8px;
+            }
+
+            .main {
+                max-width: 900px;
+                margin: 0 auto;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            /* ── Cards ── */
+            .card {
+                background: var(--card-bg);
+                border-radius: var(--radius);
+                box-shadow: var(--shadow);
+                padding: 20px;
+            }
+
+            .card-title {
+                font-size: 15px;
+                font-weight: 500;
+                color: var(--text-secondary);
+                margin-bottom: 4px;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                font-size: 11px;
+            }
+
+            .e2-value {
+                font-size: 48px;
+                font-weight: 300;
+                color: var(--text);
+                line-height: 1;
+            }
+
+            .e2-unit {
+                font-size: 18px;
+                color: var(--text-secondary);
+                margin-left: 4px;
+            }
+
+            .plot-container {
+                width: 100%;
+                height: 320px;
+                margin-top: 16px;
+                position: relative;
+            }
+
+            .disclaimer {
+                font-size: 11px;
+                color: var(--text-secondary);
+                margin-top: 10px;
+                line-height: 1.4;
+                opacity: 0.7;
+            }
+
+            /* ── Button row ── */
+            .button-row {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+            }
+
+            .action-btn {
+                background: var(--card-bg);
+                border: none;
+                border-radius: var(--radius);
+                box-shadow: var(--shadow);
+                padding: 20px 16px;
+                cursor: pointer;
+                text-align: center;
+                transition:
+                    transform 0.1s,
+                    box-shadow 0.15s;
+                color: var(--text);
+                width: 100%;
+            }
+
+            .action-btn:hover {
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            }
+            .action-btn:active {
+                transform: scale(0.97);
+            }
+
+            .action-btn .btn-icon {
+                font-size: 32px;
+                margin-bottom: 8px;
+                display: block;
+            }
+
+            .action-btn .btn-label {
+                font-size: 15px;
+                font-weight: 500;
+            }
+
+            .action-btn .btn-sub {
+                font-size: 12px;
+                color: var(--text-secondary);
+                margin-top: 4px;
+            }
+
+            .action-btn.success {
+                background: var(--success);
+                color: white;
+            }
+
+            .action-btn.success .btn-sub {
+                color: rgba(255, 255, 255, 0.8);
+            }
+
+            /* ── Chart controls ── */
+            .chart-controls {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-top: 12px;
+                align-items: center;
+            }
+
+            .chart-controls label {
+                font-size: 13px;
+                color: var(--text-secondary);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                cursor: pointer;
+            }
+
+            .chart-controls input[type="checkbox"] {
+                cursor: pointer;
+            }
+
+            .range-control {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 13px;
+                color: var(--text-secondary);
+            }
+
+            .range-control input[type="number"] {
+                width: 56px;
+                padding: 4px 6px;
+                border: 1px solid var(--divider);
+                border-radius: 6px;
+                background: var(--card-bg);
+                color: var(--text);
+                font-size: 13px;
+            }
+
+            /* ── Dialog overlay ── */
+            .overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 1000;
+                justify-content: center;
+                align-items: center;
+                padding: 16px;
+            }
+
+            .overlay.open {
+                display: flex;
+            }
+
+            .dialog {
+                background: var(--card-bg);
+                border-radius: 16px;
+                padding: 24px;
+                width: 100%;
+                max-width: 400px;
+                box-shadow: var(--shadow-lg);
+            }
+
+            .dialog h2 {
+                font-size: 18px;
+                font-weight: 600;
+                margin-bottom: 16px;
+            }
+
+            .field {
+                margin-bottom: 14px;
+            }
+
+            .field-label {
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--text-secondary);
+                margin-bottom: 4px;
+                display: block;
+            }
+
+            .field select,
+            .field input[type="number"],
+            .field input[type="datetime-local"],
+            .field input[type="date"],
+            .field input[type="text"],
+            .field textarea {
+                width: 100%;
+                padding: 10px 12px;
+                border: 1px solid var(--divider);
+                border-radius: 8px;
+                font-size: 15px;
+                background: var(--card-bg);
+                color: var(--text);
+                outline: none;
+                transition: border-color 0.15s;
+                font-family: inherit;
+            }
+
+            .field select:focus,
+            .field input:focus,
+            .field textarea:focus {
+                border-color: var(--accent);
+            }
+
+            .field textarea {
+                resize: vertical;
+                min-height: 70px;
+            }
+
+            .dialog-btns {
+                display: flex;
+                gap: 8px;
+                margin-top: 20px;
+            }
+
+            .dialog-btns button {
+                flex: 1;
+                padding: 11px 16px;
+                border: none;
+                border-radius: 8px;
+                font-size: 15px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: opacity 0.15s;
+            }
+
+            .dialog-btns button:hover {
+                opacity: 0.85;
+            }
+            .btn-cancel {
+                background: var(--divider);
+                color: var(--text);
+            }
+            .btn-confirm {
+                background: var(--accent);
+                color: white;
+            }
+            .btn-confirm:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+            .btn-danger {
+                background: var(--error);
+                color: white;
+            }
+
+            .form-error {
+                color: var(--error);
+                font-size: 13px;
+                margin-top: 8px;
+                min-height: 18px;
+            }
+
+            /* ── Settings panel ── */
+            .settings-section {
+                margin-bottom: 20px;
+            }
+            .settings-section h3 {
+                font-size: 15px;
+                font-weight: 600;
+                margin-bottom: 12px;
+            }
+            .settings-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+            @media (max-width: 480px) {
+                .settings-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            .regimen-card {
+                border: 1px solid var(--divider);
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 12px;
+            }
+
+            .regimen-card-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 10px;
+            }
+
+            .regimen-card-title {
+                font-weight: 600;
+                font-size: 14px;
+            }
+
+            .icon-btn {
+                background: none;
+                border: none;
+                cursor: pointer;
+                color: var(--text-secondary);
+                font-size: 18px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                transition: background 0.1s;
+            }
+
+            .icon-btn:hover {
+                background: var(--divider);
+            }
+
+            /* ── Toast ── */
+            .toast {
+                position: fixed;
+                bottom: 24px;
+                left: 50%;
+                transform: translateX(-50%) translateY(80px);
+                background: #333;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 24px;
+                font-size: 14px;
+                transition: transform 0.25s ease;
+                z-index: 9999;
+                pointer-events: none;
+            }
+
+            .toast.show {
+                transform: translateX(-50%) translateY(0);
+            }
+
+            /* ── Loading ── */
+            .loading-overlay {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 200px;
+                color: var(--text-secondary);
+                font-size: 14px;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>Estrannaise</h1>
+            <div class="header-actions">
+                <button
+                    class="action-btn"
+                    id="open-settings-btn"
+                    style="
+                        padding: 8px 14px;
+                        font-size: 13px;
+                        border-radius: 8px;
+                    "
+                >
+                    ⚙️ Settings
+                </button>
+            </div>
+        </header>
+
+        <main class="main">
+            <!-- Current level card -->
+            <div class="card">
+                <div class="card-title">Current Estimated E2</div>
+                <div>
+                    <span class="e2-value" id="e2-value">--</span>
+                    <span class="e2-unit" id="e2-unit">pg/mL</span>
+                </div>
+
+                <div class="plot-container" id="plot"></div>
+
+                <div class="chart-controls">
+                    <div class="range-control">
+                        <span>Show</span>
+                        <input
+                            type="number"
+                            id="days-back"
+                            value="30"
+                            min="1"
+                            max="365"
+                        />
+                        <span>days back,</span>
+                        <input
+                            type="number"
+                            id="days-forward"
+                            value="7"
+                            min="1"
+                            max="90"
+                        />
+                        <span>days ahead</span>
+                    </div>
+                    <label
+                        ><input type="checkbox" id="show-target" checked />
+                        Target range</label
+                    >
+                    <label
+                        ><input type="checkbox" id="show-danger" /> Danger
+                        threshold</label
+                    >
+                    <label
+                        ><input type="checkbox" id="show-cycle" /> Menstrual
+                        cycle</label
+                    >
+                    <label
+                        ><input type="checkbox" id="show-chevrons" checked />
+                        Dose markers</label
+                    >
+                </div>
+
+                <div class="disclaimer">
+                    Estimated levels are pharmacokinetic approximations based on
+                    population models, not actual blood serum measurements.
+                    Always confirm with blood tests.
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="button-row">
+                <button class="action-btn" id="dose-btn">
+                    <span class="btn-icon">💉</span>
+                    <div class="btn-label">Log Dose</div>
+                    <div class="btn-sub" id="dose-sub">
+                        Record an injection or dose
+                    </div>
+                </button>
+                <button class="action-btn" id="test-btn">
+                    <span class="btn-icon">🧪</span>
+                    <div class="btn-label">Log Blood Test</div>
+                    <div class="btn-sub">Record lab results</div>
+                </button>
+            </div>
+        </main>
+
+        <!-- Dose dialog -->
+        <div class="overlay" id="dose-overlay">
+            <div class="dialog">
+                <h2>Log Dose</h2>
+                <div class="field">
+                    <label class="field-label">Ester / Method</label>
+                    <select id="dose-model"></select>
+                </div>
+                <div class="field">
+                    <label class="field-label" id="dose-amount-label"
+                        >Dose amount (mg)</label
+                    >
+                    <input
+                        type="number"
+                        id="dose-amount"
+                        min="0.1"
+                        max="100"
+                        step="0.5"
+                        value="4"
+                    />
+                </div>
+                <div class="field">
+                    <label class="field-label"
+                        >Date & Time (leave blank for now)</label
+                    >
+                    <input type="datetime-local" id="dose-datetime" />
+                </div>
+                <div class="form-error" id="dose-error"></div>
+                <div class="dialog-btns">
+                    <button class="btn-cancel" id="dose-cancel">Cancel</button>
+                    <button class="btn-confirm" id="dose-confirm">
+                        Log Dose
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Blood test dialog -->
+        <div class="overlay" id="test-overlay">
+            <div class="dialog">
+                <h2>Log Blood Test</h2>
+                <div class="field">
+                    <label class="field-label">Date & Time</label>
+                    <input type="datetime-local" id="test-datetime" />
+                </div>
+                <div class="field">
+                    <label class="field-label" id="test-level-label"
+                        >Estradiol Level (pg/mL)</label
+                    >
+                    <input
+                        type="number"
+                        id="test-level"
+                        min="0"
+                        max="5000"
+                        step="0.1"
+                        placeholder="e.g. 150"
+                    />
+                </div>
+                <div class="field">
+                    <label class="field-label">Notes (optional)</label>
+                    <textarea
+                        id="test-notes"
+                        placeholder="Lab name, fasting status, etc."
+                    ></textarea>
+                </div>
+                <div class="form-error" id="test-error"></div>
+                <div class="dialog-btns">
+                    <button class="btn-cancel" id="test-cancel">Cancel</button>
+                    <button class="btn-confirm" id="test-confirm">
+                        Submit
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings dialog -->
+        <div class="overlay" id="settings-overlay">
+            <div
+                class="dialog"
+                style="max-width: 560px; max-height: 90vh; overflow-y: auto"
+            >
+                <h2>Settings</h2>
+
+                <div class="settings-section">
+                    <h3>Display</h3>
+                    <div class="field">
+                        <label class="field-label">Units</label>
+                        <select id="setting-units">
+                            <option value="pg/mL">pg/mL</option>
+                            <option value="pmol/L">pmol/L</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Regimens</h3>
+                    <div id="regimens-list"></div>
+                    <button
+                        class="btn-confirm"
+                        id="add-regimen-btn"
+                        style="
+                            padding: 8px 16px;
+                            font-size: 14px;
+                            border: none;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            width: 100%;
+                        "
+                    >
+                        + Add Regimen
+                    </button>
+                </div>
+
+                <div class="settings-section" style="margin-top: 20px">
+                    <h3 style="color: var(--error)">Danger Zone</h3>
+                    <button
+                        class="btn-danger"
+                        id="clear-data-btn"
+                        style="
+                            padding: 10px 16px;
+                            border: none;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        "
+                    >
+                        🗑 Clear All Data
+                    </button>
+                </div>
+
+                <div class="dialog-btns">
+                    <button class="btn-cancel" id="settings-cancel">
+                        Cancel
+                    </button>
+                    <button class="btn-confirm" id="settings-save">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Regimen editor dialog -->
+        <div class="overlay" id="regimen-overlay">
+            <div
+                class="dialog"
+                style="max-width: 480px; max-height: 90vh; overflow-y: auto"
+            >
+                <h2 id="regimen-dialog-title">Add Regimen</h2>
+
+                <div class="settings-grid">
+                    <div class="field">
+                        <label class="field-label">Ester</label>
+                        <select id="reg-ester">
+                            <option value="E">Estradiol</option>
+                            <option value="EB">Estradiol Benzoate</option>
+                            <option value="EV">Estradiol Valerate</option>
+                            <option value="EEn" selected>
+                                Estradiol Enanthate
+                            </option>
+                            <option value="EC">Estradiol Cypionate</option>
+                            <option value="EUn">Estradiol Undecylate</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Method</label>
+                        <select id="reg-method">
+                            <option value="im" selected>Intramuscular</option>
+                            <option value="subq">Subcutaneous</option>
+                            <option value="patch">Transdermal Patch</option>
+                            <option value="oral">Oral</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="field-label" id="reg-dose-label"
+                            >Dose (mg)</label
+                        >
+                        <input
+                            type="number"
+                            id="reg-dose"
+                            min="0.1"
+                            max="100"
+                            step="0.5"
+                            value="4"
+                        />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Interval (days)</label>
+                        <input
+                            type="number"
+                            id="reg-interval"
+                            min="0.5"
+                            max="90"
+                            step="0.5"
+                            value="7"
+                        />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Tracking mode</label>
+                        <select id="reg-mode">
+                            <option value="manual" selected>Manual</option>
+                            <option value="automatic">Automatic</option>
+                            <option value="both">Both</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Dose time</label>
+                        <input
+                            type="text"
+                            id="reg-dose-time"
+                            value="08:00"
+                            placeholder="HH:MM"
+                        />
+                    </div>
+                </div>
+
+                <div class="field" id="reg-start-date-field">
+                    <label class="field-label" for="reg-start-date"
+                        >First dose date</label
+                    >
+                    <input type="date" id="reg-start-date" />
+                    <div
+                        style="
+                            font-size: 11px;
+                            color: var(--text-secondary);
+                            margin-top: 4px;
+                            line-height: 1.4;
+                        "
+                    >
+                        The date you took (or plan to take) your first dose on
+                        this schedule. Leave blank to start one interval from
+                        today.
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label
+                        class="field-label"
+                        style="
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            cursor: pointer;
+                        "
+                    >
+                        <input type="checkbox" id="reg-backfill" />
+                        Backfill 90 days of past doses
+                    </label>
+                    <div
+                        style="
+                            font-size: 11px;
+                            color: var(--text-secondary);
+                            margin-top: 4px;
+                            line-height: 1.4;
+                        "
+                    >
+                        Records all scheduled doses back to your first dose date
+                        (or 90 days). Requires a first dose date to be set.
+                    </div>
+                </div>
+
+                <div class="dialog-btns">
+                    <button class="btn-cancel" id="regimen-cancel">
+                        Cancel
+                    </button>
+                    <button class="btn-confirm" id="regimen-save">
+                        Save Regimen
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+
+        <script>
+            // ── PK Engine (same as estrannaise-card.js) ────────────────────────────────
+
+            function e2Curve3C(t, dose, d, k1, k2, k3) {
+                if (t < 0 || dose <= 0 || d <= 0) return 0;
+                try {
+                    if (k1 === k2 && k2 === k3)
+                        return (
+                            (dose * d * k1 * k1 * t * t * Math.exp(-k1 * t)) / 2
+                        );
+                    if (k1 === k2 && k2 !== k3)
+                        return (
+                            (dose *
+                                d *
+                                k1 *
+                                k1 *
+                                (Math.exp(-k3 * t) -
+                                    Math.exp(-k1 * t) * (1 + (k1 - k3) * t))) /
+                            ((k1 - k3) * (k1 - k3))
+                        );
+                    if (k1 !== k2 && k1 === k3)
+                        return (
+                            (dose *
+                                d *
+                                k1 *
+                                k2 *
+                                (Math.exp(-k2 * t) -
+                                    Math.exp(-k1 * t) * (1 + (k1 - k2) * t))) /
+                            ((k1 - k2) * (k1 - k2))
+                        );
+                    if (k1 !== k2 && k2 === k3)
+                        return (
+                            (dose *
+                                d *
+                                k1 *
+                                k2 *
+                                (Math.exp(-k1 * t) -
+                                    Math.exp(-k2 * t) * (1 - (k1 - k2) * t))) /
+                            ((k1 - k2) * (k1 - k2))
+                        );
+                    return (
+                        dose *
+                        d *
+                        k1 *
+                        k2 *
+                        (Math.exp(-k1 * t) / ((k1 - k2) * (k1 - k3)) -
+                            Math.exp(-k2 * t) / ((k1 - k2) * (k2 - k3)) +
+                            Math.exp(-k3 * t) / ((k1 - k3) * (k2 - k3)))
+                    );
+                } catch (e) {
+                    return 0;
+                }
+            }
+
+            function esSingleDose3C(t, dose, d, k1, k2) {
+                if (t < 0 || dose <= 0 || d <= 0) return 0;
+                if (k1 === k2) return dose * d * k1 * t * Math.exp(-k1 * t);
+                return (
+                    ((dose * d * k1) / (k1 - k2)) *
+                    (Math.exp(-k2 * t) - Math.exp(-k1 * t))
+                );
+            }
+
+            function e2Patch3C(t, dose, d, k1, k2, k3, W) {
+                if (t < 0) return 0;
+                if (t <= W) return e2Curve3C(t, dose, d, k1, k2, k3);
+                const esW = esSingleDose3C(W, dose, d, k1, k2);
+                const e2W = e2Curve3C(W, dose, d, k1, k2, k3);
+                const ta = t - W;
+                let ret = 0;
+                if (esW > 0) {
+                    if (k2 === k3) ret += esW * k2 * ta * Math.exp(-k2 * ta);
+                    else
+                        ret +=
+                            ((esW * k2) / (k2 - k3)) *
+                            (Math.exp(-k3 * ta) - Math.exp(-k2 * ta));
+                }
+                if (e2W > 0) ret += e2W * Math.exp(-k3 * ta);
+                return ret;
+            }
+
+            function computeE2(tDays, dose, model, pkParams, patchWearDays) {
+                const params = pkParams[model];
+                if (!params) return 0;
+                const [d, k1, k2, k3] = params;
+                if (patchWearDays && patchWearDays[model] !== undefined)
+                    return e2Patch3C(
+                        tDays,
+                        dose * 1000,
+                        d,
+                        k1,
+                        k2,
+                        k3,
+                        patchWearDays[model],
+                    );
+                return e2Curve3C(tDays, dose, d, k1, k2, k3);
+            }
+
+            class CubicSpline {
+                constructor(xs, ys) {
+                    const n = xs.length;
+                    this.xs = xs;
+                    this.ys = ys;
+                    if (n < 2) {
+                        this.b = [];
+                        this.c = [];
+                        this.d = [];
+                        return;
+                    }
+                    const h = [],
+                        alpha = [],
+                        l = [],
+                        mu = [],
+                        z = [],
+                        c = new Array(n).fill(0),
+                        b = new Array(n).fill(0),
+                        d = new Array(n).fill(0);
+                    for (let i = 0; i < n - 1; i++) h[i] = xs[i + 1] - xs[i];
+                    for (let i = 1; i < n - 1; i++)
+                        alpha[i] =
+                            (3 / h[i]) * (ys[i + 1] - ys[i]) -
+                            (3 / h[i - 1]) * (ys[i] - ys[i - 1]);
+                    l[0] = 1;
+                    mu[0] = 0;
+                    z[0] = 0;
+                    for (let i = 1; i < n - 1; i++) {
+                        l[i] =
+                            2 * (xs[i + 1] - xs[i - 1]) - h[i - 1] * mu[i - 1];
+                        mu[i] = h[i] / l[i];
+                        z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
+                    }
+                    l[n - 1] = 1;
+                    z[n - 1] = 0;
+                    c[n - 1] = 0;
+                    for (let j = n - 2; j >= 0; j--) {
+                        c[j] = z[j] - mu[j] * c[j + 1];
+                        b[j] =
+                            (ys[j + 1] - ys[j]) / h[j] -
+                            (h[j] * (c[j + 1] + 2 * c[j])) / 3;
+                        d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
+                    }
+                    this.b = b;
+                    this.c = c;
+                    this.d = d;
+                }
+                at(x) {
+                    const { xs, ys } = this;
+                    if (xs.length < 2) return ys[0] || 0;
+                    let i = xs.length - 2;
+                    for (let j = 0; j < xs.length - 1; j++) {
+                        if (x < xs[j + 1]) {
+                            i = j;
+                            break;
+                        }
+                    }
+                    const dx = x - xs[i];
+                    return (
+                        ys[i] +
+                        this.b[i] * dx +
+                        this.c[i] * dx * dx +
+                        this.d[i] * dx * dx * dx
+                    );
+                }
+            }
+
+            // ── App state ───────────────────────────────────────────────────────────────
+
+            let state = null;
+            let chartSettings = {
+                daysBack: 30,
+                daysForward: 7,
+                showTarget: true,
+                showDanger: false,
+                showCycle: false,
+                showChevrons: true,
+            };
+
+            // ── API helpers ─────────────────────────────────────────────────────────────
+
+            async function api(path, method = "GET", body = null) {
+                const opts = {
+                    method,
+                    headers: { "Content-Type": "application/json" },
+                };
+                if (body) opts.body = JSON.stringify(body);
+                const res = await fetch("/api" + path, opts);
+                if (!res.ok) {
+                    const err = await res
+                        .json()
+                        .catch(() => ({ detail: res.statusText }));
+                    throw new Error(err.detail || res.statusText);
+                }
+                return res.json();
+            }
+
+            // ── Chart rendering ─────────────────────────────────────────────────────────
+
+            function renderChart(attrs) {
+                const pkParams = attrs.pk_parameters || {};
+                const patchWearDays = attrs.patch_wear_days || {};
+                const scalingFactor = attrs.scaling_factor || 1.0;
+                const scalingVariance = attrs.scaling_variance || 0.0;
+                const manualDoses = attrs.doses || [];
+                const bloodTests = attrs.blood_tests || [];
+                const targetRange = attrs.target_range || {
+                    lower: 100,
+                    upper: 200,
+                };
+                const cycleData = attrs.menstrual_cycle_data || null;
+                const allConfigs = attrs.all_configs || [];
+                const units = attrs.units || "pg/mL";
+                const esters = attrs.esters || {};
+                const baselineE2 = attrs.baseline_e2 || 0;
+                const baselineTestTs = attrs.baseline_test_ts || 0;
+
+                const cf = units === "pmol/L" ? 3.6713 : 1.0;
+                const now = Date.now() / 1000;
+                const tMin = now - chartSettings.daysBack * 86400;
+                const tMax = now + chartSettings.daysForward * 86400;
+
+                // Build all doses (manual + automatic future)
+                let allDoses = [...manualDoses];
+
+                const ESTER_METHOD_COMBO = {
+                    "EB|im": "EB im",
+                    "EV|im": "EV im",
+                    "EEn|im": "EEn im",
+                    "EC|im": "EC im",
+                    "EUn|im": "EUn im",
+                    "EB|subq": "EB im",
+                    "EV|subq": "EV im",
+                    "EEn|subq": "EEn im",
+                    "EC|subq": "EC im",
+                    "EUn|subq": "EUn casubq",
+                    "E|patch": "patch",
+                    "E|oral": "E oral",
+                };
+
+                function resolveModelKey(ester, method, intervalDays) {
+                    const key = ESTER_METHOD_COMBO[`${ester}|${method}`];
+                    if (key === "patch")
+                        return intervalDays <= 5 ? "patch tw" : "patch ow";
+                    return key || null;
+                }
+
+                function alignToTimeOfDay(nowSec, doseTime, intervalSec) {
+                    let hour = 8,
+                        minute = 0;
+                    if (doseTime) {
+                        const p = doseTime.split(":");
+                        hour = parseInt(p[0]) || 8;
+                        minute = parseInt(p[1]) || 0;
+                    }
+                    const todayDose = new Date(nowSec * 1000);
+                    todayDose.setHours(hour, minute, 0, 0);
+                    const todayTs = todayDose.getTime() / 1000;
+                    return todayTs > nowSec ? todayTs - intervalSec : todayTs;
+                }
+
+                for (const cfg of allConfigs) {
+                    const cfgMode = cfg.mode || "manual";
+                    if (cfgMode !== "automatic" && cfgMode !== "both") continue;
+                    const ester = cfg.ester || "";
+                    const method = cfg.method || "im";
+                    let cfgDoseMg = cfg.dose_mg || 0;
+                    let cfgInterval = cfg.interval_days || 7;
+                    const doseTime = cfg.dose_time || "08:00";
+
+                    const cycleFitRegimen = attrs.cycle_fit_regimen;
+                    const suggestedRegimen = attrs.suggested_regimen;
+
+                    if (
+                        cfg.auto_regimen &&
+                        cycleFitRegimen &&
+                        cycleFitRegimen.schedules
+                    ) {
+                        const nowDate = new Date(now * 1000);
+                        const localMid = new Date(
+                            nowDate.getFullYear(),
+                            nowDate.getMonth(),
+                            nowDate.getDate(),
+                        );
+                        const epochDayNow = Math.floor(
+                            localMid.getTime() / 86400000,
+                        );
+                        const cycleDayNow = ((epochDayNow % 28) + 28) % 28;
+                        let hour = 8,
+                            minute = 0;
+                        if (doseTime) {
+                            const p = doseTime.split(":");
+                            hour = parseInt(p[0]) || 8;
+                            minute = parseInt(p[1]) || 0;
+                        }
+                        for (const sch of cycleFitRegimen.schedules) {
+                            const schIntervalSec = sch.interval_days * 86400;
+                            const schPhase = Math.floor(sch.phase_days);
+                            const daysBack =
+                                (((cycleDayNow - schPhase) % 28) + 28) % 28;
+                            const anchorDate = new Date(
+                                nowDate.getFullYear(),
+                                nowDate.getMonth(),
+                                nowDate.getDate() - daysBack,
+                                hour,
+                                minute,
+                                0,
+                                0,
+                            );
+                            let t = anchorDate.getTime() / 1000;
+                            while (t <= now) t += schIntervalSec;
+                            while (t <= tMax) {
+                                allDoses.push({
+                                    timestamp: t,
+                                    model: sch.model_key,
+                                    dose_mg: sch.dose_mg,
+                                    source: "automatic",
+                                });
+                                t += schIntervalSec;
+                            }
+                        }
+                    } else {
+                        if (
+                            cfg.auto_regimen &&
+                            suggestedRegimen &&
+                            !suggestedRegimen.schedules
+                        ) {
+                            cfgDoseMg = suggestedRegimen.dose_mg || cfgDoseMg;
+                            cfgInterval =
+                                suggestedRegimen.interval_days || cfgInterval;
+                        }
+                        const intervalSec = cfgInterval * 86400;
+                        const modelKey = resolveModelKey(
+                            ester,
+                            method,
+                            cfgInterval,
+                        );
+                        if (!modelKey) continue;
+                        const phaseDays = cfg.phase_days || 0;
+                        if (phaseDays > 0) {
+                            const nowDate = new Date(now * 1000);
+                            const localMid = new Date(
+                                nowDate.getFullYear(),
+                                nowDate.getMonth(),
+                                nowDate.getDate(),
+                            );
+                            const epochDayNow = Math.floor(
+                                localMid.getTime() / 86400000,
+                            );
+                            const cycleDayNow = ((epochDayNow % 28) + 28) % 28;
+                            let hour = 8,
+                                minute = 0;
+                            if (doseTime) {
+                                const p = doseTime.split(":");
+                                hour = parseInt(p[0]) || 8;
+                                minute = parseInt(p[1]) || 0;
+                            }
+                            const daysBackC =
+                                (((cycleDayNow - Math.floor(phaseDays)) % 28) +
+                                    28) %
+                                28;
+                            const anchorDate = new Date(
+                                nowDate.getFullYear(),
+                                nowDate.getMonth(),
+                                nowDate.getDate() - daysBackC,
+                                hour,
+                                minute,
+                                0,
+                                0,
+                            );
+                            let t = anchorDate.getTime() / 1000;
+                            while (t <= now) t += intervalSec;
+                            while (t <= tMax) {
+                                allDoses.push({
+                                    timestamp: t,
+                                    model: modelKey,
+                                    dose_mg: cfgDoseMg,
+                                    source: "automatic",
+                                });
+                                t += intervalSec;
+                            }
+                        } else {
+                            const anchor = alignToTimeOfDay(
+                                now,
+                                doseTime,
+                                intervalSec,
+                            );
+                            let t = anchor + intervalSec;
+                            while (t <= tMax) {
+                                allDoses.push({
+                                    timestamp: t,
+                                    model: modelKey,
+                                    dose_mg: cfgDoseMg,
+                                    source: "automatic",
+                                });
+                                t += intervalSec;
+                            }
+                        }
+                    }
+                }
+
+                // Compute E2 curve
+                const numPoints = 500;
+                const step = (tMax - tMin) / (numPoints - 1);
+                const histX = [],
+                    histY = [],
+                    predX = [],
+                    predY = [];
+                const bandUpperX = [],
+                    bandUpperY = [],
+                    bandLowerX = [],
+                    bandLowerY = [];
+                const showBands =
+                    scalingVariance > 0 &&
+                    (attrs.blood_tests || []).length >= 2;
+                const sqrtVar = Math.sqrt(scalingVariance);
+
+                const baselineDecay = (tSec) => {
+                    const ageDays = (tSec - baselineTestTs) / 86400;
+                    return baselineE2 * Math.exp(-0.02 * Math.max(0, ageDays));
+                };
+
+                for (let i = 0; i < numPoints; i++) {
+                    const t = tMin + i * step;
+                    const tDate = new Date(t * 1000);
+                    let e2raw = 0;
+                    for (const dose of allDoses) {
+                        const tDays = (t - dose.timestamp) / 86400;
+                        e2raw += computeE2(
+                            tDays,
+                            dose.dose_mg,
+                            dose.model,
+                            pkParams,
+                            patchWearDays,
+                        );
+                    }
+                    let e2 = e2raw * scalingFactor * cf;
+                    if (baselineE2 > 0 && t >= baselineTestTs)
+                        e2 += baselineDecay(t) * cf;
+                    if (t <= now) {
+                        histX.push(tDate);
+                        histY.push(Math.max(0, e2));
+                    } else {
+                        predX.push(tDate);
+                        predY.push(Math.max(0, e2));
+                    }
+                    if (showBands) {
+                        const upper =
+                                e2raw * (scalingFactor + 2 * sqrtVar) * cf,
+                            lower =
+                                e2raw *
+                                Math.max(0, scalingFactor - 2 * sqrtVar) *
+                                cf;
+                        if (t <= now) {
+                            bandUpperX.push(tDate);
+                            bandUpperY.push(Math.max(0, upper));
+                            bandLowerX.push(tDate);
+                            bandLowerY.push(Math.max(0, lower));
+                        }
+                    }
+                }
+
+                const nowDate = new Date(now * 1000);
+                let e2NowRaw = 0;
+                for (const dose of allDoses) {
+                    const tDays = (now - dose.timestamp) / 86400;
+                    e2NowRaw += computeE2(
+                        tDays,
+                        dose.dose_mg,
+                        dose.model,
+                        pkParams,
+                        patchWearDays,
+                    );
+                }
+                let e2Now = e2NowRaw * scalingFactor * cf;
+                if (baselineE2 > 0 && now >= baselineTestTs)
+                    e2Now += baselineDecay(now) * cf;
+                histX.push(nowDate);
+                histY.push(Math.max(0, e2Now));
+                predX.unshift(nowDate);
+                predY.unshift(Math.max(0, e2Now));
+
+                // Traces
+                const traces = [];
+                const lineColor = "#E91E63";
+
+                if (showBands && bandUpperX.length > 0) {
+                    traces.push({
+                        x: bandUpperX.concat([...bandLowerX].reverse()),
+                        y: bandUpperY.concat([...bandLowerY].reverse()),
+                        fill: "toself",
+                        fillcolor: "rgba(233,30,99,0.10)",
+                        line: { width: 0 },
+                        type: "scatter",
+                        mode: "lines",
+                        name: "Confidence band",
+                        hoverinfo: "skip",
+                        showlegend: true,
+                    });
+                }
+
+                traces.push({
+                    x: histX,
+                    y: histY,
+                    type: "scatter",
+                    mode: "lines+markers",
+                    name: "Estimated E2",
+                    line: { color: lineColor, width: 2.5 },
+                    marker: { size: 2.5, color: lineColor, maxdisplayed: 60 },
+                    hovertemplate: `<b>%{y:.0f}</b> ${units}<br>%{x}<extra></extra>`,
+                });
+                traces.push({
+                    x: predX,
+                    y: predY,
+                    type: "scatter",
+                    mode: "lines+markers",
+                    name: "Projected E2",
+                    line: { color: lineColor, width: 2, dash: "dot" },
+                    marker: { size: 2.5, color: lineColor, maxdisplayed: 30 },
+                    hovertemplate: `<b>%{y:.0f}</b> ${units} (projected)<br>%{x}<extra></extra>`,
+                });
+
+                if (chartSettings.showTarget) {
+                    const lo = targetRange.lower * cf,
+                        hi = targetRange.upper * cf;
+                    traces.push({
+                        x: [
+                            new Date(tMin * 1000),
+                            new Date(tMax * 1000),
+                            new Date(tMax * 1000),
+                            new Date(tMin * 1000),
+                        ],
+                        y: [lo, lo, hi, hi],
+                        fill: "toself",
+                        fillcolor: "rgba(33,150,243,0.10)",
+                        line: { width: 0 },
+                        type: "scatter",
+                        mode: "lines",
+                        name: `Target (${targetRange.lower}–${targetRange.upper} pg/mL)`,
+                        hoverinfo: "skip",
+                        showlegend: true,
+                    });
+                }
+
+                if (chartSettings.showDanger) {
+                    const dl = 500 * cf;
+                    traces.push({
+                        x: [
+                            new Date(tMin * 1000),
+                            new Date(tMax * 1000),
+                            new Date(tMax * 1000),
+                            new Date(tMin * 1000),
+                        ],
+                        y: [dl, dl, 999999, 999999],
+                        fill: "toself",
+                        fillcolor: "rgba(244,67,54,0.08)",
+                        line: { width: 0 },
+                        type: "scatter",
+                        mode: "lines",
+                        name: "Danger (>500 pg/mL)",
+                        hoverinfo: "skip",
+                        showlegend: true,
+                    });
+                }
+
+                if (chartSettings.showCycle && cycleData) {
+                    const splineMean = new CubicSpline(
+                            cycleData.t,
+                            cycleData.E2,
+                        ),
+                        splineP5 = new CubicSpline(cycleData.t, cycleData.E2p5),
+                        splineP95 = new CubicSpline(
+                            cycleData.t,
+                            cycleData.E2p95,
+                        );
+                    const cX = [],
+                        cP5 = [],
+                        cP95 = [],
+                        cMean = [];
+                    for (let i = 0; i < numPoints; i++) {
+                        const t = tMin + i * step;
+                        cX.push(new Date(t * 1000));
+                        const d = (((t / 86400) % 28) + 28) % 28;
+                        cMean.push(splineMean.at(d) * cf);
+                        cP5.push(splineP5.at(d) * cf);
+                        cP95.push(splineP95.at(d) * cf);
+                    }
+                    traces.push({
+                        x: cX.concat([...cX].reverse()),
+                        y: cP5.concat([...cP95].reverse()),
+                        fill: "toself",
+                        fillcolor: "rgba(156,39,176,0.08)",
+                        line: { width: 0 },
+                        type: "scatter",
+                        mode: "lines",
+                        name: "Menstrual cycle (p5–p95)",
+                        hoverinfo: "skip",
+                        showlegend: true,
+                    });
+                    traces.push({
+                        x: cX,
+                        y: cMean,
+                        type: "scatter",
+                        mode: "lines",
+                        name: "Cycle mean",
+                        line: {
+                            color: "rgba(156,39,176,0.4)",
+                            width: 1,
+                            dash: "dash",
+                        },
+                        hovertemplate: `<b>%{y:.0f}</b> ${units} (cycle)<extra></extra>`,
+                    });
+                }
+
+                if (bloodTests.length > 0) {
+                    const tX = [],
+                        tY = [],
+                        tText = [];
+                    for (const bt of bloodTests) {
+                        if (bt.timestamp < tMin || bt.timestamp > tMax)
+                            continue;
+                        tX.push(new Date(bt.timestamp * 1000));
+                        tY.push(bt.level_pg_ml * cf);
+                        tText.push(
+                            `<b>${(bt.level_pg_ml * cf).toFixed(0)}</b> ${units}${bt.notes ? `<br>${bt.notes}` : ""}<br>ID: ${bt.id}`,
+                        );
+                    }
+                    if (tX.length > 0)
+                        traces.push({
+                            x: tX,
+                            y: tY,
+                            type: "scatter",
+                            mode: "markers",
+                            name: "Blood tests",
+                            marker: {
+                                color: "#F44336",
+                                size: 10,
+                                symbol: "circle",
+                                line: { color: "#fff", width: 2 },
+                            },
+                            hovertemplate: "%{text}<extra></extra>",
+                            text: tText,
+                        });
+                }
+
+                // Merge coincident doses
+                const MERGE_WINDOW = 3600;
+                const mergedDoses = [];
+                const sorted = [...allDoses].sort(
+                    (a, b) => a.timestamp - b.timestamp,
+                );
+                for (const dose of sorted) {
+                    const last = mergedDoses[mergedDoses.length - 1];
+                    if (
+                        last &&
+                        Math.abs(dose.timestamp - last.timestamp) <
+                            MERGE_WINDOW &&
+                        dose.model === last.model
+                    ) {
+                        last.dose_mg += dose.dose_mg;
+                        if (dose.source === "manual") last.source = "manual";
+                    } else mergedDoses.push({ ...dose });
+                }
+
+                if (chartSettings.showChevrons) {
+                    const mX = [],
+                        mY = [],
+                        mTxt = [],
+                        aX = [],
+                        aY = [],
+                        aTxt = [];
+                    for (const dose of mergedDoses) {
+                        if (dose.timestamp < tMin || dose.timestamp > tMax)
+                            continue;
+                        const x = new Date(dose.timestamp * 1000);
+                        const esterName =
+                            esters[(dose.model || "").split(" ")[0]] ||
+                            dose.model;
+                        const label = `${dose.dose_mg}mg ${esterName}`;
+                        if (dose.source === "manual") {
+                            mX.push(x);
+                            mY.push(0);
+                            mTxt.push(label);
+                        } else {
+                            aX.push(x);
+                            aY.push(0);
+                            aTxt.push(label + " (scheduled)");
+                        }
+                    }
+                    if (mX.length > 0)
+                        traces.push({
+                            x: mX,
+                            y: mY,
+                            type: "scatter",
+                            mode: "markers",
+                            name: "Manual doses",
+                            marker: {
+                                color: "rgba(33,150,243,0.6)",
+                                size: 12,
+                                symbol: "triangle-up",
+                            },
+                            hovertemplate:
+                                "<b>%{text}</b><br>%{x|%b %d %H:%M}<extra></extra>",
+                            text: mTxt,
+                            cliponaxis: false,
+                        });
+                    if (aX.length > 0)
+                        traces.push({
+                            x: aX,
+                            y: aY,
+                            type: "scatter",
+                            mode: "markers",
+                            name: "Scheduled doses",
+                            marker: {
+                                color: "rgba(33,150,243,0.4)",
+                                size: 10,
+                                symbol: "triangle-up",
+                                opacity: 0.4,
+                            },
+                            hovertemplate:
+                                "<b>%{text}</b><br>%{x|%b %d %H:%M}<extra></extra>",
+                            text: aTxt,
+                            cliponaxis: false,
+                        });
+                }
+
+                const isDark = window.matchMedia(
+                    "(prefers-color-scheme: dark)",
+                ).matches;
+                const textColor = isDark ? "#e0e0e0" : "#424242";
+                const gridColor = isDark
+                    ? "rgba(255,255,255,0.08)"
+                    : "rgba(0,0,0,0.06)";
+                const dataMax = Math.max(
+                    ...histY,
+                    ...predY,
+                    (targetRange.upper || 200) * cf,
+                );
+                const yAxisMax = dataMax * 1.15;
+                const nowLineColor = isDark
+                    ? "rgba(255,255,255,0.35)"
+                    : "rgba(0,0,0,0.25)";
+
+                traces.push({
+                    x: [nowDate, nowDate, nowDate],
+                    y: [0, yAxisMax, yAxisMax],
+                    type: "scatter",
+                    mode: "lines+text",
+                    name: "Now",
+                    line: { color: nowLineColor, width: 1.5, dash: "dot" },
+                    text: ["", "", "Now"],
+                    textposition: "top center",
+                    textfont: { color: nowLineColor, size: 10 },
+                    hoverinfo: "skip",
+                    showlegend: false,
+                    cliponaxis: false,
+                });
+
+                const layout = {
+                    autosize: true,
+                    height: 300,
+                    margin: { l: 50, r: 20, t: 20, b: 40 },
+                    paper_bgcolor: "rgba(0,0,0,0)",
+                    plot_bgcolor: "rgba(0,0,0,0)",
+                    font: { color: textColor, size: 12 },
+                    xaxis: {
+                        type: "date",
+                        gridcolor: gridColor,
+                        linecolor: gridColor,
+                        tickformat: "%b %d\n%H:%M",
+                        range: [new Date(tMin * 1000), new Date(tMax * 1000)],
+                        fixedrange: true,
+                    },
+                    yaxis: {
+                        title: units,
+                        gridcolor: gridColor,
+                        linecolor: gridColor,
+                        range: [0, yAxisMax],
+                        fixedrange: true,
+                    },
+                    showlegend: false,
+                    hovermode: "closest",
+                    hoverdistance: 50,
+                    dragmode: false,
+                };
+
+                const plotEl = document.getElementById("plot");
+                if (plotEl.querySelector(".js-plotly-plot")) {
+                    Plotly.react(plotEl, traces, layout, {
+                        displayModeBar: false,
+                        responsive: true,
+                        scrollZoom: false,
+                    });
+                } else {
+                    Plotly.newPlot(plotEl, traces, layout, {
+                        displayModeBar: false,
+                        responsive: true,
+                        scrollZoom: false,
+                    });
+                }
+            }
+
+            // ── State loading ───────────────────────────────────────────────────────────
+
+            async function loadState() {
+                try {
+                    state = await api("/state");
+                    document.getElementById("e2-value").textContent =
+                        state.current_e2 != null ? state.current_e2 : "--";
+                    document.getElementById("e2-unit").textContent =
+                        state.units || "pg/mL";
+                    renderChart(state);
+                    populateDoseModelDropdown(state);
+                } catch (err) {
+                    console.error("Failed to load state:", err);
+                    document.getElementById("e2-value").textContent = "Error";
+                }
+            }
+
+            // ── Dose model dropdown ─────────────────────────────────────────────────────
+
+            const MODEL_LABELS = {
+                "EB im": "Estradiol Benzoate (IM)",
+                "EV im": "Estradiol Valerate (IM)",
+                "EEn im": "Estradiol Enanthate (IM)",
+                "EC im": "Estradiol Cypionate (IM)",
+                "EUn im": "Estradiol Undecylate (IM)",
+                "EUn casubq": "Estradiol Undecylate (SubQ)",
+                "patch tw": "Estradiol Patch (2×/week)",
+                "patch ow": "Estradiol Patch (1×/week)",
+                "E oral": "Estradiol (Oral)",
+            };
+
+            const ESTER_METHOD_COMBO = {
+                "EB|im": "EB im",
+                "EV|im": "EV im",
+                "EEn|im": "EEn im",
+                "EC|im": "EC im",
+                "EUn|im": "EUn im",
+                "EB|subq": "EB im",
+                "EV|subq": "EV im",
+                "EEn|subq": "EEn im",
+                "EC|subq": "EC im",
+                "EUn|subq": "EUn casubq",
+                "E|patch": "patch",
+                "E|oral": "E oral",
+            };
+
+            function resolveModelKey(ester, method, intervalDays) {
+                const key = ESTER_METHOD_COMBO[`${ester}|${method}`];
+                if (key === "patch")
+                    return (intervalDays || 7) <= 5 ? "patch tw" : "patch ow";
+                return key || null;
+            }
+
+            function populateDoseModelDropdown(st) {
+                const select = document.getElementById("dose-model");
+                const allConfigs = (st && st.all_configs) || [];
+                const seen = new Set();
+                select.innerHTML = "";
+
+                // Add models from configured regimens first
+                for (const cfg of allConfigs) {
+                    const model = resolveModelKey(
+                        cfg.ester,
+                        cfg.method,
+                        cfg.interval_days,
+                    );
+                    if (!model || seen.has(model)) continue;
+                    seen.add(model);
+                    const opt = document.createElement("option");
+                    opt.value = model;
+                    opt.textContent = MODEL_LABELS[model] || model;
+                    select.appendChild(opt);
+                }
+
+                // If no regimens, show all PK models
+                if (seen.size === 0) {
+                    for (const [key, label] of Object.entries(MODEL_LABELS)) {
+                        const opt = document.createElement("option");
+                        opt.value = key;
+                        opt.textContent = label;
+                        select.appendChild(opt);
+                    }
+                }
+
+                updateDoseAmountLabel();
+            }
+
+            function updateDoseAmountLabel() {
+                const model = document.getElementById("dose-model").value;
+                const label = document.getElementById("dose-amount-label");
+                label.textContent =
+                    model && model.startsWith("patch")
+                        ? "Dose amount (mcg/day)"
+                        : "Dose amount (mg)";
+            }
+
+            // ── Dialogs ─────────────────────────────────────────────────────────────────
+
+            function openOverlay(id) {
+                document.getElementById(id).classList.add("open");
+            }
+            function closeOverlay(id) {
+                document.getElementById(id).classList.remove("open");
+            }
+
+            function showToast(msg, duration = 2500) {
+                const t = document.getElementById("toast");
+                t.textContent = msg;
+                t.classList.add("show");
+                setTimeout(() => t.classList.remove("show"), duration);
+            }
+
+            // Dose dialog
+            document
+                .getElementById("dose-btn")
+                .addEventListener("click", () => {
+                    if (state) populateDoseModelDropdown(state);
+                    // Pre-fill datetime with now
+                    const now = new Date();
+                    now.setSeconds(0, 0);
+                    document.getElementById("dose-datetime").value = new Date(
+                        now.getTime() - now.getTimezoneOffset() * 60000,
+                    )
+                        .toISOString()
+                        .slice(0, 16);
+                    document.getElementById("dose-error").textContent = "";
+                    openOverlay("dose-overlay");
+                });
+            document
+                .getElementById("dose-cancel")
+                .addEventListener("click", () => closeOverlay("dose-overlay"));
+            document
+                .getElementById("dose-model")
+                .addEventListener("change", updateDoseAmountLabel);
+
+            document
+                .getElementById("dose-confirm")
+                .addEventListener("click", async () => {
+                    const model = document.getElementById("dose-model").value;
+                    const dose_mg = parseFloat(
+                        document.getElementById("dose-amount").value,
+                    );
+                    const dtVal =
+                        document.getElementById("dose-datetime").value;
+                    const errEl = document.getElementById("dose-error");
+
+                    if (!model) {
+                        errEl.textContent = "Please select an ester.";
+                        return;
+                    }
+                    if (!dose_mg || dose_mg <= 0) {
+                        errEl.textContent = "Please enter a valid dose.";
+                        return;
+                    }
+
+                    const timestamp = dtVal
+                        ? new Date(dtVal).getTime() / 1000
+                        : null;
+                    const btn = document.getElementById("dose-confirm");
+                    btn.disabled = true;
+                    errEl.textContent = "";
+
+                    try {
+                        await api("/doses", "POST", {
+                            model,
+                            dose_mg,
+                            timestamp,
+                        });
+                        closeOverlay("dose-overlay");
+                        showToast("✅ Dose logged!");
+                        await loadState();
+                    } catch (err) {
+                        errEl.textContent = err.message;
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+
+            // Blood test dialog
+            document
+                .getElementById("test-btn")
+                .addEventListener("click", () => {
+                    const now = new Date();
+                    now.setSeconds(0, 0);
+                    const local = new Date(
+                        now.getTime() - now.getTimezoneOffset() * 60000,
+                    )
+                        .toISOString()
+                        .slice(0, 16);
+                    document.getElementById("test-datetime").value = local;
+                    document.getElementById("test-datetime").max = local;
+                    document.getElementById("test-level").value = "";
+                    document.getElementById("test-notes").value = "";
+                    document.getElementById("test-error").textContent = "";
+                    // Update unit label
+                    const units = (state && state.units) || "pg/mL";
+                    document.getElementById("test-level-label").textContent =
+                        `Estradiol Level (${units})`;
+                    openOverlay("test-overlay");
+                });
+            document
+                .getElementById("test-cancel")
+                .addEventListener("click", () => closeOverlay("test-overlay"));
+
+            document
+                .getElementById("test-confirm")
+                .addEventListener("click", async () => {
+                    const dtVal =
+                        document.getElementById("test-datetime").value;
+                    const level = parseFloat(
+                        document.getElementById("test-level").value,
+                    );
+                    const notes =
+                        document.getElementById("test-notes").value || null;
+                    const errEl = document.getElementById("test-error");
+
+                    if (!dtVal) {
+                        errEl.textContent = "Please select a date and time.";
+                        return;
+                    }
+                    if (isNaN(level) || level < 0) {
+                        errEl.textContent = "Please enter a valid level.";
+                        return;
+                    }
+
+                    const timestamp = new Date(dtVal).getTime() / 1000;
+                    if (timestamp > Date.now() / 1000 + 60) {
+                        errEl.textContent = "Date cannot be in the future.";
+                        return;
+                    }
+
+                    // Convert pmol/L → pg/mL for storage
+                    let level_pg_ml = level;
+                    if (state && state.units === "pmol/L")
+                        level_pg_ml = level / 3.6713;
+
+                    const btn = document.getElementById("test-confirm");
+                    btn.disabled = true;
+                    errEl.textContent = "";
+
+                    try {
+                        await api("/blood-tests", "POST", {
+                            level_pg_ml,
+                            timestamp,
+                            notes,
+                        });
+                        closeOverlay("test-overlay");
+                        showToast("✅ Blood test logged!");
+                        await loadState();
+                    } catch (err) {
+                        errEl.textContent = err.message;
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+
+            // Close dialogs on overlay click
+            [
+                "dose-overlay",
+                "test-overlay",
+                "settings-overlay",
+                "regimen-overlay",
+            ].forEach((id) => {
+                document.getElementById(id).addEventListener("click", (e) => {
+                    if (e.target.id === id) closeOverlay(id);
+                });
+            });
+
+            // ── Chart controls ──────────────────────────────────────────────────────────
+
+            document
+                .getElementById("days-back")
+                .addEventListener("change", (e) => {
+                    chartSettings.daysBack = Math.max(1, +e.target.value || 30);
+                    if (state) renderChart(state);
+                });
+            document
+                .getElementById("days-forward")
+                .addEventListener("change", (e) => {
+                    chartSettings.daysForward = Math.max(
+                        1,
+                        +e.target.value || 7,
+                    );
+                    if (state) renderChart(state);
+                });
+            document
+                .getElementById("show-target")
+                .addEventListener("change", (e) => {
+                    chartSettings.showTarget = e.target.checked;
+                    if (state) renderChart(state);
+                });
+            document
+                .getElementById("show-danger")
+                .addEventListener("change", (e) => {
+                    chartSettings.showDanger = e.target.checked;
+                    if (state) renderChart(state);
+                });
+            document
+                .getElementById("show-cycle")
+                .addEventListener("change", (e) => {
+                    chartSettings.showCycle = e.target.checked;
+                    if (state) renderChart(state);
+                });
+            document
+                .getElementById("show-chevrons")
+                .addEventListener("change", (e) => {
+                    chartSettings.showChevrons = e.target.checked;
+                    if (state) renderChart(state);
+                });
+
+            // ── Settings ─────────────────────────────────────────────────────────────────
+
+            let pendingConfig = null;
+            let editingRegimenIndex = null;
+
+            document
+                .getElementById("open-settings-btn")
+                .addEventListener("click", async () => {
+                    pendingConfig = await api("/config");
+                    document.getElementById("setting-units").value =
+                        pendingConfig.units || "pg/mL";
+                    renderRegimensList(pendingConfig.regimens || []);
+                    openOverlay("settings-overlay");
+                });
+
+            document
+                .getElementById("settings-cancel")
+                .addEventListener("click", () =>
+                    closeOverlay("settings-overlay"),
+                );
+
+            document
+                .getElementById("settings-save")
+                .addEventListener("click", async () => {
+                    try {
+                        await api("/config", "POST", pendingConfig);
+                        closeOverlay("settings-overlay");
+                        showToast("✅ Settings saved");
+                        await loadState();
+                    } catch (err) {
+                        showToast("❌ " + err.message);
+                    }
+                });
+
+            document
+                .getElementById("setting-units")
+                .addEventListener("change", (e) => {
+                    if (pendingConfig) pendingConfig.units = e.target.value;
+                });
+
+            function renderRegimensList(regimens) {
+                const container = document.getElementById("regimens-list");
+                container.innerHTML = "";
+                if (!regimens || regimens.length === 0) {
+                    container.innerHTML =
+                        '<p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">No regimens configured. Add one to get started.</p>';
+                    return;
+                }
+                const ESTER_LABELS = {
+                    E: "Estradiol",
+                    EB: "E. Benzoate",
+                    EV: "E. Valerate",
+                    EEn: "E. Enanthate",
+                    EC: "E. Cypionate",
+                    EUn: "E. Undecylate",
+                };
+                const METHOD_LABELS = {
+                    im: "IM",
+                    subq: "SubQ",
+                    patch: "Patch",
+                    oral: "Oral",
+                };
+                regimens.forEach((reg, i) => {
+                    const div = document.createElement("div");
+                    div.className = "regimen-card";
+                    const esterLabel = ESTER_LABELS[reg.ester] || reg.ester;
+                    const methodLabel = METHOD_LABELS[reg.method] || reg.method;
+                    const doseUnit = reg.method === "patch" ? "mcg/day" : "mg";
+                    div.innerHTML = `
+      <div class="regimen-card-header">
+        <div class="regimen-card-title">${esterLabel} (${methodLabel})</div>
+        <div style="display:flex;gap:4px;">
+          <button class="icon-btn" data-edit="${i}">✏️</button>
+          <button class="icon-btn" data-delete="${i}">🗑</button>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--text-secondary);">
+        ${reg.dose_mg} ${doseUnit} every ${reg.interval_days} days — ${reg.mode || "manual"}
+        ${reg.start_date ? `<br><span style="font-size:11px;">First dose: ${reg.start_date}</span>` : ""}
+      </div>
+    `;
+                    div.querySelector("[data-edit]").addEventListener(
+                        "click",
+                        () => openRegimenEditor(i),
+                    );
+                    div.querySelector("[data-delete]").addEventListener(
+                        "click",
+                        () => {
+                            pendingConfig.regimens.splice(i, 1);
+                            renderRegimensList(pendingConfig.regimens);
+                        },
+                    );
+                    container.appendChild(div);
+                });
+            }
+
+            document
+                .getElementById("add-regimen-btn")
+                .addEventListener("click", () => openRegimenEditor(null));
+
+            function openRegimenEditor(index) {
+                editingRegimenIndex = index;
+                const reg =
+                    index !== null ? pendingConfig.regimens[index] : null;
+                document.getElementById("regimen-dialog-title").textContent =
+                    index !== null ? "Edit Regimen" : "Add Regimen";
+                document.getElementById("reg-ester").value = reg
+                    ? reg.ester
+                    : "EEn";
+                document.getElementById("reg-method").value = reg
+                    ? reg.method
+                    : "im";
+                document.getElementById("reg-dose").value = reg
+                    ? reg.dose_mg
+                    : 4;
+                document.getElementById("reg-interval").value = reg
+                    ? reg.interval_days
+                    : 7;
+                document.getElementById("reg-mode").value = reg
+                    ? reg.mode || "manual"
+                    : "manual";
+                document.getElementById("reg-dose-time").value = reg
+                    ? reg.dose_time || "08:00"
+                    : "08:00";
+                document.getElementById("reg-backfill").checked = reg
+                    ? !!reg.backfill_doses
+                    : false;
+                document.getElementById("reg-start-date").value = reg
+                    ? reg.start_date || ""
+                    : "";
+                openOverlay("regimen-overlay");
+            }
+
+            document
+                .getElementById("regimen-cancel")
+                .addEventListener("click", () =>
+                    closeOverlay("regimen-overlay"),
+                );
+            document
+                .getElementById("regimen-save")
+                .addEventListener("click", () => {
+                    const startDateVal =
+                        document.getElementById("reg-start-date").value;
+                    const reg = {
+                        ester: document.getElementById("reg-ester").value,
+                        method: document.getElementById("reg-method").value,
+                        dose_mg:
+                            parseFloat(
+                                document.getElementById("reg-dose").value,
+                            ) || 4,
+                        interval_days:
+                            parseFloat(
+                                document.getElementById("reg-interval").value,
+                            ) || 7,
+                        mode: document.getElementById("reg-mode").value,
+                        dose_time:
+                            document.getElementById("reg-dose-time").value ||
+                            "08:00",
+                        backfill_doses:
+                            document.getElementById("reg-backfill").checked,
+                        start_date: startDateVal || "",
+                        auto_regimen: false,
+                        phase_days: 0,
+                    };
+                    if (!pendingConfig.regimens) pendingConfig.regimens = [];
+                    if (editingRegimenIndex !== null) {
+                        pendingConfig.regimens[editingRegimenIndex] = reg;
+                    } else {
+                        pendingConfig.regimens.push(reg);
+                    }
+                    closeOverlay("regimen-overlay");
+                    renderRegimensList(pendingConfig.regimens);
+                });
+
+            // Clear all data
+            document
+                .getElementById("clear-data-btn")
+                .addEventListener("click", async () => {
+                    if (
+                        !confirm(
+                            "Delete ALL doses and blood tests? This cannot be undone.",
+                        )
+                    )
+                        return;
+                    try {
+                        await api("/data", "DELETE");
+                        closeOverlay("settings-overlay");
+                        showToast("🗑 All data cleared");
+                        await loadState();
+                    } catch (err) {
+                        showToast("❌ " + err.message);
+                    }
+                });
+
+            // ── Auto-refresh every 5 minutes ─────────────────────────────────────────────
+
+            setInterval(loadState, 5 * 60 * 1000);
+
+            // ── Init ──────────────────────────────────────────────────────────────────────
+
+            loadState();
+        </script>
+    </body>
+</html>

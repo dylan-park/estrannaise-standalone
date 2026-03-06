@@ -1,10 +1,29 @@
-# Estrannaise HRT Monitor
+# Estrannaise HRT Monitor - Standalone
 
-![estrannaise](estrannaise.png)
-
-A Home Assistant custom integration for tracking estradiol levels using pharmacokinetic modeling. Based on [estrannaise.js](https://github.com/WHSAH/estrannaise.js).
+A standalone web app version of the [ha-estrannaise](https://github.com/PersephoneKarnstein/ha-estrannaise) Home Assistant integration. Same pharmacokinetic E2 modeling from [estrannaise.js](https://github.com/WHSAH/estrannaise.js).
 
 All data is stored locally in a SQLite database and never touches the network.
+
+## Quick start
+
+```bash
+# Build and run
+docker compose up -d
+
+# Open in browser
+open http://localhost:8080
+```
+
+## Features
+
+- Plotly E2 level chart (past + predicted)
+- Log doses and blood test results
+- Confidence bands from blood test calibration
+- Menstrual cycle overlay
+- Target / danger threshold bands
+- Multiple regimen support
+- All data stored locally in SQLite (`/data/estrannaise.db`)
+- No network requests, Plotly.js bundled locally
 
 ## What it does
 
@@ -27,114 +46,66 @@ Subcutaneous injections for EB, EV, EEn, and EC use the same PK model as intramu
 
 Oral micronized estradiol is modeled using the same three-compartment framework with parameters calibrated to match published clinical data (Kuhnz 1993, Femtrace FDA review). The absorption rate constant is set very large (k1=100 day⁻¹) so the model effectively reduces to a Bateman (1-compartment absorption-elimination) curve. Oral dosing is only available for plain Estradiol, not esterified forms.
 
-## Installation
+## Configuration
 
-### HACS (Recommended)
+Settings are stored in `/data/config.json` inside the container (persisted via Docker volume).
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=PersephoneKarnstein&repository=ha-estrannaise)
+Use the **Settings** button in the app to:
+- Set units (pg/mL or pmol/L)
+- Add/edit/remove dosing regimens
+- Clear all data
 
-### Manual
+### Timezone
 
-1. Copy `custom_components/estrannaise/` into your Home Assistant `custom_components/` directory.
-
-2. Restart Home Assistant.
-
-3. Go to **Settings > Devices & Services > Add Integration** and search for **Estrannaise HRT Monitor**.
-
-4. Follow the config flow to set up your dosing regimen. Three setup modes are available:
-   - **Guided** — a beginner-friendly wizard that asks method-specific questions (pill dose, injection volume, patch strength, etc.) and computes the regimen for you
-   - **Manual** — enter ester, method, dose, and interval directly
-   - **Auto-generate (beta)** — targets a trough of ~200 pg/mL or approximates a natural menstrual cycle using NNLS cycle fitting
-
-   All modes then ask for tracking mode (Manual / Automatic / Both), dose time of day, units (pg/mL or pmol/L), and optional calendar integration.
-
-5. Add the Lovelace cards to your dashboard (see below).
-
-## Dashboard cards
-
-### Estradiol Level chart
+Set your timezone in `docker-compose.yml` so dose time-of-day anchoring is correct:
 
 ```yaml
-type: custom:estrannaise-card
-entity: sensor.estrannaise_estradiol_enanthate
-title: Estradiol Level
-days_to_show: 30
-days_to_predict: 7
-show_target_range: true
-show_danger_threshold: false
-show_menstrual_cycle: false
-line_color: '#E91E63'
+environment:
+  - TZ=America/New_York   # or Europe/London, Asia/Tokyo, etc.
 ```
 
-Card editor options:
-- **Entity**: The Estrannaise sensor entity
-- **Title / Icon**: Customize the card header
-- **Days to show / predict**: How far back and forward to render
-- **Show target range**: Blue band at 100-200 pg/mL
-- **Show danger threshold**: Red band above 500 pg/mL
-- **Show menstrual cycle overlay**: Reference menstrual cycle E2 curve (p5-p95 band)
-- **Show dose markers**: Toggle dose chevrons and spike lines on/off (default: on)
-- **Line / prediction color**: Customize the trace colors
+## Architecture
 
-The chart displays:
-- Solid line for past estimated levels, dotted for future predictions
-- Confidence bands based on PK model variance
-- Dose chevrons at the bottom (hover near one to see a spike line with dose info)
-- Blood test markers (red dots)
-- "Now" vertical line separating past from prediction
-- Coincident doses of the same ester are merged and shown as a combined amount
-
-### Log Dose button
-
-```yaml
-type: custom:estrannaise-dose-button
-entity: sensor.estrannaise_estradiol_enanthate
+```
+estrannaise-standalone/
+├── backend/
+│   ├── main.py        # FastAPI app, REST endpoints
+│   ├── database.py    # SQLite async wrapper (aiosqlite)
+│   ├── pk.py          # PK math engine (ported from const.py)
+│   ├── scheduler.py   # Auto-dose generation (ported from coordinator.py)
+│   └── config.py      # JSON config file management
+├── frontend/
+│   ├── index.html     # Single-page app (vanilla JS + Plotly)
+│   └── static/
+│       └── plotly-2.35.2.min.js
+├── Dockerfile
+├── docker-compose.yml
+└── requirements.txt
 ```
 
-Opens a dialog to select the ester and dose amount before logging. The dropdown is populated from all configured regimens. Optional card config overrides:
-- **model**: Default ester pre-selected in the dialog (e.g., `EEn im`, `E oral`)
-- **dose_mg**: Default dose amount
+## API
 
-Shows "Automatic dosing enabled" if tracking mode is set to Automatic.
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/state` | Full state (E2, doses, blood tests, PK params) |
+| GET | `/api/config` | App configuration |
+| POST | `/api/config` | Update configuration |
+| GET | `/api/doses` | List all doses |
+| POST | `/api/doses` | Log a dose `{model, dose_mg, timestamp?}` |
+| DELETE | `/api/doses/{id}` | Delete a dose |
+| GET | `/api/blood-tests` | List all blood tests |
+| POST | `/api/blood-tests` | Log a blood test `{level_pg_ml, timestamp?, notes?}` |
+| DELETE | `/api/blood-tests/{id}` | Delete a blood test |
+| DELETE | `/api/data` | Clear ALL data (irreversible) |
 
-### Log Blood Test button
+## Migrating from HA
 
-```yaml
-type: custom:estrannaise-test-button
-entity: sensor.estrannaise_estradiol_enanthate
-```
+If you want to carry over existing data from the HA integration's SQLite database:
 
-Opens a dialog to record blood test results (level in pg/mL). The model uses blood tests to compute a scaling factor that adjusts predictions to match your individual pharmacokinetics.
-
-## Multiple regimens
-
-You can add multiple integration entries (e.g., 3mg EEn every 7 days + 10mg EEn every 28 days). Each entry's doses are aggregated additively on the same chart. When doses from different regimens coincide (within 1 hour, same ester), they appear as a single merged chevron and calendar event showing the combined dose.
-
-## Auto-generate mode (beta)
-
-When choosing "Auto-generate" during setup, you can target:
-- **Target range**: Computes a single dose/interval to maintain a trough around 200 pg/mL
-- **Menstrual range**: Uses NNLS cycle fitting to find up to 4 dose schedules that approximate the estradiol curve of a natural menstrual cycle (~100 pg/mL average). Each schedule becomes a separate integration entry.
-
-This mode is marked beta — it works well for most ester/method combinations but the computed regimens should be reviewed with your healthcare provider.
-
-## Backfill
-
-When using Automatic or Both tracking mode, the integration can backfill up to 90 days of past scheduled doses so the chart shows a complete history from the first render. The guided setup asks "Have you been on this schedule for a while?" — answering yes enables backfill. It can also be toggled via the integration's options flow.
-
-## Calendar integration
-
-When enabled, scheduled doses appear as events on your Home Assistant calendar. Coincident same-ester doses are merged into single events.
-
-## Services
-
-| Service | Description |
-|---|---|
-| `estrannaise.log_dose` | Record a dose (entity, model key, dose_mg, optional timestamp) |
-| `estrannaise.log_blood_test` | Record a blood test (entity, level_pg_ml, optional timestamp/notes) |
-| `estrannaise.delete_dose` | Remove a dose by its database ID |
-| `estrannaise.delete_blood_test` | Remove a blood test by its database ID |
-| `estrannaise.clear_data` | Delete all saved doses and blood tests (irreversible) |
+1. Copy `<ha_config>/estrannaise.db` to the Docker volume's `/data/estrannaise.db`
+2. The schema is compatible — doses and blood tests will load immediately
+3. Note: the standalone app uses a single database without `config_entry_id` filtering,
+   so all doses/tests across all HA entries will be merged (which is the desired behavior)
 
 ## How the PK model works
 
@@ -150,10 +121,20 @@ Blood test calibration computes an exponentially-weighted average scaling factor
 
 ## Privacy
 
-All data stays local. The SQLite database is stored at `<ha_config>/estrannaise.db`. Plotly.js is bundled locally (no CDN). No network requests are made.
+All data stays local. The SQLite database is stored at `/data/estrannaise.db` in Docker volume. Plotly.js is bundled locally (no CDN). No network requests are made.
+
+## Future Work
+
+- [ ] Light/Dark mode toggle
+- [ ] Manage existing data
+  - [ ] Delete/Modify logged blood test
+  - [ ] Delete previous dose (manual/automatic)
+- [ ] Unite time format (Logging uses AM/PM, Graph/Regimens uses 24h)
+- [ ] Abiltiy to export data
+- [ ] Investigate Auto-generate mode
 
 ## Credits
 
 - PK model and parameters: [estrannaise.js](https://github.com/WHSAH/estrannaise.js) by WHSAH
-- Monotherapy dose guidelines: [A Practical Guide To Feminizing Hrt](https://pghrt.diy/) by Katie Tightpussy
-- Charting: [Plotly.js](https://plotly.com/javascript/) (bundled)
+- Original HA integration: [ha-estrannaise](https://github.com/PersephoneKarnstein/ha-estrannaise) by PersephoneKarnstein
+- Charting: [Plotly.js](https://plotly.com/javascript/) (bundled locally)

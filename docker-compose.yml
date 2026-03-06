@@ -1,0 +1,16 @@
+services:
+  estrannaise:
+    build: .
+    container_name: estrannaise
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persistent data: SQLite database and config.json
+      - estrannaise_data:/data
+    restart: unless-stopped
+    environment:
+      # Optional: set TZ so dose time-of-day anchoring uses your local timezone
+      - TZ=America/Chicago
+
+volumes:
+  estrannaise_data:

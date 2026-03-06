@@ -1994,18 +1994,56 @@
                 .getElementById("add-regimen-btn")
                 .addEventListener("click", () => openRegimenEditor(null));
 
+            // Valid ester→method combos derived from ESTER_METHOD_TO_MODEL in pk.py
+            const ESTER_METHODS = {
+                E: ["patch", "oral"],
+                EB: ["im", "subq"],
+                EV: ["im", "subq"],
+                EEn: ["im", "subq"],
+                EC: ["im", "subq"],
+                EUn: ["im", "subq"],
+            };
+            const METHOD_LABELS = {
+                im: "Intramuscular",
+                subq: "Subcutaneous",
+                patch: "Transdermal Patch",
+                oral: "Oral",
+            };
+
+            function updateMethodOptions(selectedEster, currentMethod) {
+                const methodSel = document.getElementById("reg-method");
+                const validMethods =
+                    ESTER_METHODS[selectedEster] || Object.keys(METHOD_LABELS);
+                methodSel.innerHTML = "";
+                for (const m of validMethods) {
+                    const opt = document.createElement("option");
+                    opt.value = m;
+                    opt.textContent = METHOD_LABELS[m];
+                    methodSel.appendChild(opt);
+                }
+                // Keep existing selection if still valid, otherwise fall back to first option
+                if (currentMethod && validMethods.includes(currentMethod)) {
+                    methodSel.value = currentMethod;
+                } else {
+                    methodSel.value = validMethods[0];
+                }
+            }
+
+            document
+                .getElementById("reg-ester")
+                .addEventListener("change", (e) => {
+                    updateMethodOptions(e.target.value, null);
+                });
+
             function openRegimenEditor(index) {
                 editingRegimenIndex = index;
                 const reg =
                     index !== null ? pendingConfig.regimens[index] : null;
                 document.getElementById("regimen-dialog-title").textContent =
                     index !== null ? "Edit Regimen" : "Add Regimen";
-                document.getElementById("reg-ester").value = reg
-                    ? reg.ester
-                    : "EEn";
-                document.getElementById("reg-method").value = reg
-                    ? reg.method
-                    : "im";
+                const esterVal = reg ? reg.ester : "EEn";
+                document.getElementById("reg-ester").value = esterVal;
+                updateMethodOptions(esterVal, reg ? reg.method : "im");
                 document.getElementById("reg-dose").value = reg
                     ? reg.dose_mg
                     : 4;

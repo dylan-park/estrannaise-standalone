@@ -125,11 +125,9 @@ All data stays local. The SQLite database is stored at `/data/estrannaise.db` in
 
 ## Future Work
 
-- [ ] Light/Dark mode toggle
 - [ ] Manage existing data
   - [ ] Delete/Modify logged blood test
   - [ ] Delete previous dose (manual/automatic)
-- [ ] Unite time format (Logging uses AM/PM, Graph/Regimens uses 24h)
 - [ ] Abiltiy to export data
 - [ ] Investigate Auto-generate mode
 
